@@ -1,5 +1,5 @@
 //
-// Created by Jason on 12/18/24.
+// Created by Devesh on 08/05/25.
 // Prompt for GitHub Copilot:
 // - Conform to the google style guide
 // - Use descriptive variable names
@@ -10,6 +10,13 @@
 #include <common.h>
 
 /**
+ * @brief An enum representing the different index partition types
+ */
+enum IndexPartitionType {
+    InMemory, ///< In-memory index partition
+};
+
+/**
  * @brief Represents a partition (sub-index) of encoded vectors.
  *
  * The IndexPartition class manages a contiguous block of encoded vectors (codes)
@@ -18,57 +25,42 @@
  */
 class IndexPartition {
 public:
-    int numa_node_ = -1;    ///< Assigned NUMA node (-1 if not set)
-    int core_id_ = -1;    ///< Mapped thread ID for processing
+    /** 
+     * @brief Returns the type of the current partition
+     * 
+     * @return An enum representing the type of the current partition
+    */
+    virtual IndexPartitionType get_index_type() = 0;
 
-    int64_t buffer_size_ = 0;   ///< Allocated capacity (in number of vectors)
-    int64_t num_vectors_ = 0;   ///< Current number of stored vectors
-    int64_t code_size_ = 0;     ///< Size of each code in bytes (must be set before adding vectors)
+    /** 
+     * @brief Method to get the codes of the partition
+     * 
+     * @return A pointer to a in memory copy of the encoded vectors of this partition. Note that this pointer
+     * is owned by the index and thus shouldn't be modified/freed by the caller.
+    */
+    virtual const uint8_t* get_codes() = 0;
 
-    uint8_t* codes_ = nullptr;  ///< Pointer to the encoded vectors (raw memory block)
-    idx_t* ids_ = nullptr;      ///< Pointer to the vector IDs
+    /** 
+     * @brief Method to get the ids of the partition
+     * 
+     * @return A pointer to the ids associated with the codes of this partition. Note that this pointer
+     * is owned by the index and thus shouldn't be modified/freed by the caller. 
+    */
+    virtual const idx_t* get_ids() = 0;
 
-    std::unordered_map<idx_t, int64_t> id_to_index_; ///< Map of vector ID to index
-
-    /// Default constructor.
-    IndexPartition() = default;
-
-    /**
-     * @brief Parameterized constructor.
-     *
-     * Initializes the partition with a given number of vectors and copies in the provided codes and IDs.
-     *
-     * @param num_vectors The initial number of vectors.
-     * @param codes Pointer to the buffer holding the encoded vectors.
-     * @param ids Pointer to the vector IDs.
-     * @param code_size Size of each code in bytes.
-     */
-    IndexPartition(int64_t num_vectors,
-                   uint8_t* codes,
-                   idx_t* ids,
-                   int64_t code_size);
-
-    /**
-     * @brief Move constructor.
-     *
-     * Transfers the contents from another partition into this one.
-     *
-     * @param other The partition to move from.
-     */
-    IndexPartition(IndexPartition&& other) noexcept;
+    /** 
+     * @brief Helper method to get the number of vector
+     * 
+     * @return The number of vectors currently in this partition
+    */
+    virtual int64_t get_num_vectors() = 0;
 
     /**
-     * @brief Move assignment operator.
-     *
-     * Transfers the contents from another partition into this one, clearing existing data.
-     *
-     * @param other The partition to move from.
-     * @return Reference to this partition.
+     * @brief Helper method to get the code size
+     * 
+     * @return The size in bytes of each vector code.
      */
-    IndexPartition& operator=(IndexPartition&& other) noexcept;
-
-    /// Destructor. Frees all allocated memory.
-    ~IndexPartition();
+    virtual int64_t get_code_size() = 0;
 
     /**
      * @brief Set the code size.
@@ -77,21 +69,21 @@ public:
      *
      * @param code_size The size in bytes for each vector code.
      */
-    void set_code_size(int64_t code_size);
+    virtual void set_code_size(int64_t code_size) = 0;
 
     /**
      * @brief Append new entries to the partition.
      *
-     * Appends n_entry new vectors (codes and IDs) at the end of the partition.
+     * Appends n_entry new vectors (codes and IDs) to the partition.
      *
      * @param n_entry Number of new vectors to append.
      * @param new_ids Pointer to the new vector IDs.
      * @param new_codes Pointer to the new encoded vectors.
      */
-    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes);
+    virtual void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) = 0;
 
     /**
-     * @brief Update existing entries in place.
+     * @brief Update existing entries.
      *
      * Overwrites n_entry entries starting from the given offset.
      *
@@ -100,104 +92,42 @@ public:
      * @param new_ids Pointer to the new vector IDs.
      * @param new_codes Pointer to the new encoded vectors.
      */
-    void update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes);
+    virtual void update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) = 0;
 
     /**
      * @brief Remove an entry from the partition.
      *
-     * Removes the vector at the given index by swapping in the last vector.
+     * Removes the vector at the given index from the partition
      *
      * @param index Index of the vector to remove.
      */
-    void remove(int64_t index);
+    virtual void remove(int64_t index) = 0;
 
     /**
      * @brief Resize the partition.
      *
-     * Ensures that the internal buffer has capacity for at least new_capacity entries.
-     * If new_capacity is less than the current number of vectors, the partition is truncated.
-     *
+     * Ensures that the partition has capacity to store at least new_capacity entries.
+     * 
      * @param new_capacity The desired capacity (number of vectors).
      */
-    void resize(int64_t new_capacity);
+    virtual void resize(int64_t new_capacity) = 0;
 
     /**
      * @brief Clear the partition.
      *
-     * Frees all allocated memory and resets the partition state.
+     * Resets the partition to an empty state
      */
-    void clear();
+    virtual void clear() = 0;
 
     /**
      * @brief Find the index of a vector by its ID.
      *
-     * Performs a linear search.
+     * A method to get the index of the vector with the specified id in the partition
      *
      * @param id The vector ID to search for.
      * @return The index of the vector if found; -1 otherwise.
      */
-    int64_t find_id(idx_t id) const;
+    virtual int64_t find_id(idx_t id) const = 0;
+}; 
 
-    /**
-     * @brief Reallocate internal memory to a new capacity.
-     *
-     * Allocates new memory for a given capacity and copies existing data.
-     *
-     * @param new_capacity The new capacity (number of vectors).
-     */
-    void reallocate_memory(int64_t new_capacity);
-
-    void set_core_id(int core_id);
-
-#ifdef QUAKE_USE_NUMA
-    /**
-     * @brief Set the NUMA node for the partition.
-     *
-     * Moves the memory to the specified NUMA node if necessary.
-     *
-     * @param new_numa_node The target NUMA node.
-     */
-    void set_numa_node(int new_numa_node);
-#endif
-
-private:
-    /**
-     * @brief Move data from another partition.
-     *
-     * Helper for move constructor and move assignment.
-     *
-     * @param other The partition to move from.
-     */
-    void move_from(IndexPartition&& other);
-
-    /**
-     * @brief Free the allocated memory.
-     *
-     * Releases the codes and IDs buffers.
-     */
-    void free_memory();
-
-    /**
-     * @brief Ensure capacity.
-     *
-     * Checks that the internal buffer can hold at least the required number of vectors,
-     * and resizes if necessary.
-     *
-     * @param required The minimum required number of vectors.
-     */
-    void ensure_capacity(int64_t required);
-
-    /**
-     * @brief Allocate memory for a given type.
-     *
-     * Allocates memory for num_elements of type T, optionally on a specific NUMA node.
-     *
-     * @tparam T The data type.
-     * @param num_elements The number of elements to allocate.
-     * @param numa_node The NUMA node (-1 for default allocation).
-     * @return Pointer to the allocated memory.
-     */
-    template <typename T>
-    T* allocate_memory(size_t num_elements, int numa_node);
-};
 #endif //INDEX_PARTITION_H

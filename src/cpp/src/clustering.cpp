@@ -7,7 +7,7 @@
 #include "clustering.h"
 #include <faiss/IndexFlat.h>
 #include "faiss/Clustering.h"
-#include "index_partition.h"
+#include "in_memory_index_partition.h"
 #include <list_scanning.h>
 
 shared_ptr<Clustering> kmeans(Tensor vectors,
@@ -130,8 +130,8 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
         new_partitions.resize(n_clusters);
 
         for (int i = 0; i < n_clusters; i++) {
-            new_partitions[i] = make_shared<IndexPartition>();
-            new_partitions[i]->set_code_size(partitions[0]->code_size_);
+            new_partitions[i] = make_shared<InMemoryIndexPartition>();
+            new_partitions[i]->set_code_size(partitions[0]->get_code_size());
             new_partitions[i]->resize(10);
         }
 
@@ -139,11 +139,11 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
 
         // Process each existing partition.
         for (auto &part: partitions) {
-            int64_t nvec = part->num_vectors_;
+            int64_t nvec = part->get_num_vectors();
             if (nvec <= 0) continue;
 
-            float *part_vecs = (float *) part->codes_;
-            int64_t *part_vec_ids = part->ids_;
+            const float* part_vecs = (float *) part->get_codes();
+            const int64_t* part_vec_ids = part->get_ids();
 
             // Create batched TopK buffers (k=1 for nearest centroid).
             vector<shared_ptr<TopkBuffer> > buffers = create_buffers(nvec, 1, false);
@@ -164,8 +164,8 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
                 int assigned_cluster = assign[0];
 
                 // Update accumulators.
-                float *vec_ptr = part_vecs + i * d;
-                int64_t *vec_id = part_vec_ids + i;
+                const float* vec_ptr = part_vecs + i * d;
+                const int64_t* vec_id = part_vec_ids + i;
 
                 for (int j = 0; j < d; j++) {
                     centroid_sums_accessor[assigned_cluster][j] += vec_ptr[j];

@@ -15,8 +15,8 @@ namespace faiss {
             size_t old_list_no = p.first;
             shared_ptr<IndexPartition> part = p.second;
 
-            if (part->num_vectors_ > 0) {
-                ret->add_entries(new_list_no, part->num_vectors_, part->ids_, part->codes_);
+            if (part->get_num_vectors() > 0) {
+                ret->add_entries(new_list_no, part->get_num_vectors(), part->get_ids(), part->get_codes());
             }
             remap_ids[old_list_no] = new_list_no;
             new_list_no += 1;
@@ -46,7 +46,7 @@ namespace faiss {
         // Initialize empty partitions
         for (size_t i = 0; i < nlist; i++) {
             // IndexPartition ip;
-            shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
+            shared_ptr<IndexPartition> ip = std::make_shared<InMemoryIndexPartition>();
             ip->set_code_size(code_size);
             partitions_[i] = ip;
         }
@@ -60,7 +60,7 @@ namespace faiss {
     size_t DynamicInvertedLists::ntotal() const {
         size_t ntotal = 0;
         for (auto &kv: partitions_) {
-            ntotal += kv.second->num_vectors_;
+            ntotal += kv.second->get_num_vectors();
         }
         return ntotal;
     }
@@ -70,7 +70,7 @@ namespace faiss {
         if (it == partitions_.end()) {
             throw std::runtime_error("List does not exist in list_size");
         }
-        return static_cast<size_t>(it->second->num_vectors_);
+        return static_cast<size_t>(it->second->get_num_vectors());
     }
 
     const uint8_t *DynamicInvertedLists::get_codes(size_t list_no) const {
@@ -78,7 +78,7 @@ namespace faiss {
         if (it == partitions_.end()) {
             throw std::runtime_error("List does not exist in get_codes");
         }
-        return it->second->codes_;
+        return it->second->get_codes();
     }
 
     const idx_t *DynamicInvertedLists::get_ids(size_t list_no) const {
@@ -86,7 +86,7 @@ namespace faiss {
         if (it == partitions_.end()) {
             throw std::runtime_error("List does not exist in get_ids");
         }
-        return it->second->ids_;
+        return it->second->get_ids();
     }
 
     void DynamicInvertedLists::release_codes(size_t list_no, const uint8_t *codes) const {
@@ -104,7 +104,7 @@ namespace faiss {
         }
 
         shared_ptr<IndexPartition> part = it->second;
-        if (part->num_vectors_ == 0) return;
+        if (part->get_num_vectors() == 0) return;
 
         int64_t idx_to_remove = part->find_id(id);
         if (idx_to_remove != -1) {
@@ -124,8 +124,8 @@ namespace faiss {
 
         // We'll perform removals by scanning and removing matches.
         // Because remove() swaps last element in, we must be careful with iteration.
-        for (int64_t i = 0; i < part->num_vectors_;) {
-            if (vectors_to_remove_set.find(part->ids_[i]) != vectors_to_remove_set.end()) {
+        for (int64_t i = 0; i < part->get_num_vectors();) {
+            if (vectors_to_remove_set.find(part->get_ids()[i]) != vectors_to_remove_set.end()) {
                 part->remove(i);
                 // don't increment i, because we just swapped a new element into i
             } else {
@@ -138,8 +138,8 @@ namespace faiss {
         // Remove from all partitions
         for (auto &kv: partitions_) {
             shared_ptr<IndexPartition> part = kv.second;
-            for (int64_t i = 0; i < part->num_vectors_;) {
-                if (vectors_to_remove.find(part->ids_[i]) != vectors_to_remove.end()) {
+            for (int64_t i = 0; i < part->get_num_vectors();) {
+                if (vectors_to_remove.find(part->get_ids()[i]) != vectors_to_remove.end()) {
                     part->remove(i);
                 } else {
                     i++;
@@ -164,7 +164,7 @@ namespace faiss {
 
         shared_ptr<IndexPartition> part = it->second;
         // Ensure code_size is set
-        if (part->code_size_ != static_cast<int64_t>(code_size)) {
+        if (part->get_code_size() != static_cast<int64_t>(code_size)) {
             part->set_code_size(static_cast<int64_t>(code_size));
         }
 
@@ -218,7 +218,7 @@ namespace faiss {
                 it = partitions_.find(new_p);
             }
             shared_ptr<IndexPartition> new_part = it->second;
-            if (new_part->code_size_ != static_cast<int64_t>(code_size)) {
+            if (new_part->get_code_size() != static_cast<int64_t>(code_size)) {
                 new_part->set_code_size((int64_t) code_size);
             }
 
@@ -270,7 +270,7 @@ namespace faiss {
         if (partitions_.find(list_no) != partitions_.end()) {
             throw std::runtime_error("List already exists in add_list");
         }
-        shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
+        shared_ptr<IndexPartition> ip = std::make_shared<InMemoryIndexPartition>();
         ip->set_code_size((int64_t) code_size);
         partitions_[list_no] = ip;
         nlist++;
@@ -292,14 +292,14 @@ namespace faiss {
             if (pos != -1) {
                 // Found it, copy vector
                 // code_size_ is in bytes. Assuming float vectors of dimension (code_size_/sizeof(float))
-                std::memcpy(vector_values, part->codes_ + pos * part->code_size_, part->code_size_);
+                std::memcpy(vector_values, part->get_codes() + pos * part->get_code_size(), part->get_code_size());
                 return true;
             }
         }
         return false;
     }
 
-    vector<float *> DynamicInvertedLists::get_vectors_by_id(vector<int64_t> ids) {
+    vector<float*> DynamicInvertedLists::get_vectors_by_id(vector<int64_t> ids) {
 
         vector<float *> ret;
         for (int64_t id : ids) {
@@ -308,7 +308,8 @@ namespace faiss {
                 shared_ptr<IndexPartition> part = kv.second;
                 int64_t pos = part->find_id(id);
                 if (pos != -1) {
-                    ret.push_back(reinterpret_cast<float *>(part->codes_ + pos * part->code_size_));
+                    const float* vec_ptr = reinterpret_cast<const float*>(part->get_codes() + pos * part->get_code_size());
+                    ret.push_back(const_cast<float*>(vec_ptr));
                     found = true;
                     break;
                 }
@@ -394,12 +395,12 @@ namespace faiss {
             offsets[i] = current_offset;
             shared_ptr<IndexPartition> part = partitions_.at(part_ids[i]);
 
-            size_t nv = static_cast<size_t>(part->num_vectors_);
-            size_t csize = nv * static_cast<size_t>(part->code_size_);
+            size_t nv = static_cast<size_t>(part->get_num_vectors());
+            size_t csize = nv * static_cast<size_t>(part->get_code_size());
             size_t isize = nv * sizeof(idx_t);
 
-            ofs.write(reinterpret_cast<const char *>(part->codes_), csize);
-            ofs.write(reinterpret_cast<const char *>(part->ids_), isize);
+            ofs.write(reinterpret_cast<const char *>(part->get_codes()), csize);
+            ofs.write(reinterpret_cast<const char *>(part->get_ids()), isize);
 
             current_offset += (csize + isize);
         }
@@ -501,7 +502,7 @@ namespace faiss {
             ifs.read(reinterpret_cast<char*>(ids), isize);
 
             // IndexPartition part = IndexPartition(nv64, codes, ids, code_size);
-            shared_ptr<IndexPartition> part = std::make_shared<IndexPartition>(nv64, codes, ids, code_size);
+            shared_ptr<IndexPartition> part = std::make_shared<InMemoryIndexPartition>(nv64, codes, ids, code_size);
             partitions_[pid] = part;
 
             // save to free codes and ids since IndexPartition makes its own copies

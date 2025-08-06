@@ -603,11 +603,21 @@ void PartitionManager::distribute_partitions(int num_workers) {
 }
 
 void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id) {
-    partition_store_->partitions_[partition_id]->core_id_ = core_id;
+    std::shared_ptr<IndexPartition> partition = partition_store_->partitions_[partition_id];
+    if(partition->get_index_type() == IndexPartitionType::InMemory) { 
+        shared_ptr<InMemoryIndexPartition> in_memory_partition = std::dynamic_pointer_cast<InMemoryIndexPartition>(partition);
+        in_memory_partition->core_id_ = core_id;
+    }
 }
 
 int PartitionManager::get_partition_core_id(int64_t partition_id) {
-    return partition_store_->partitions_[partition_id]->core_id_;
+    std::shared_ptr<IndexPartition> partition = partition_store_->partitions_[partition_id];
+    if(partition->get_index_type() == IndexPartitionType::InMemory) { 
+        shared_ptr<InMemoryIndexPartition> in_memory_partition = std::dynamic_pointer_cast<InMemoryIndexPartition>(partition);
+        return in_memory_partition->core_id_;
+    } else { 
+        return -1;
+    }
 }
 
 int64_t PartitionManager::ntotal() const {

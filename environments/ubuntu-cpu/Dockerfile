@@ -6,6 +6,7 @@ FROM ubuntu:20.04
 ENV CONDA_DIR=/opt/miniconda
 ENV PATH="${CONDA_DIR}/bin:${PATH}"
 ENV DEBIAN_FRONTEND=noninteractive
+ENV GRPC_INSTALL_DIR="/usr/local"
 
 # -----------------------------
 # Install system dependencies
@@ -15,6 +16,10 @@ RUN apt-get update && \
       wget \
       curl \
       build-essential \
+      autoconf \
+      libtool \
+      pkg-config \
+      libssl-dev \
       ca-certificates \
       swig \
       git \
@@ -37,9 +42,12 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
     bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
     rm /tmp/miniconda.sh
 
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+RUN conda update -n base -c defaults conda
 
 # Copy in your conda environment YAML
-COPY environments/ubuntu-cpu/conda.yaml /tmp/conda.yaml
+COPY conda.yaml /tmp/conda.yaml
 
 # Create quake-env
 RUN conda env create -f /tmp/conda.yaml && conda clean -afy
@@ -49,9 +57,28 @@ RUN conda env create -f /tmp/conda.yaml && conda clean -afy
 # -----------------------------
 RUN conda run -n quake-env pip install torch --index-url https://download.pytorch.org/whl/cpu
 
+# -----------------------------
+# Install grpc
+# -----------------------------
+RUN mkdir -p /dependencies
+WORKDIR /dependencies
+RUN git clone --recurse-submodules -b v1.74.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc
+WORKDIR /dependencies/grpc
+
+RUN mkdir -p build
+WORKDIR /dependencies/grpc/build
+RUN cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR ..
+RUN make -j$(nproc) && make install
+
 RUN echo "===== DEBUG: which conda =====" && which conda
 RUN echo "===== DEBUG: conda info =====" && conda info
 RUN echo "===== DEBUG: conda env list =====" && conda env list
 RUN echo "===== DEBUG: quake-env check =====" && conda run -n quake-env python -c "import sys; print('OK in quake-env; python:', sys.executable)"
 
+# Activates quake-env at runtime beginning
+RUN mkdir -p /working_dir
+RUN conda init bash
+RUN echo "conda activate quake-env" >> ~/.bashrc
+
+WORKDIR /working_dir
 CMD ["/bin/bash"]

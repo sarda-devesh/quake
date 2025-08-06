@@ -1,17 +1,17 @@
 // index_partition_test.cpp
 
 #include <gtest/gtest.h>
-#include "index_partition.h"  // Include the IndexPartition header
+#include "in_memory_index_partition.h"  // Include the InMemoryIndexPartition header
 #include <vector>
 #include <cstring>
 
 using namespace faiss;
 
-class IndexPartitionTest : public ::testing::Test {
+class InMemoryIndexPartitionTest : public ::testing::Test {
 protected:
     int64_t initial_num_vectors = 10;
     int64_t code_size = 16; // bytes per code
-    IndexPartition* partition;
+    shared_ptr<InMemoryIndexPartition> partition;
 
     // Vectors to hold initial codes and ids for verification
     std::vector<uint8_t> initial_codes_vec_;
@@ -31,7 +31,7 @@ protected:
         std::memcpy(initial_ids, initial_ids_vec_.data(), initial_num_vectors * sizeof(idx_t));
 
         // Initialize an IndexPartition with initial data
-        partition = new IndexPartition(initial_num_vectors, initial_codes, initial_ids, code_size);
+        partition = make_shared<InMemoryIndexPartition>(initial_num_vectors, initial_codes, initial_ids, code_size);
 
         // Free temporary allocations as IndexPartition has its own copies
         std::free(initial_codes);
@@ -39,7 +39,7 @@ protected:
     }
 
     virtual void TearDown() {
-        delete partition;
+        // Partition automatically gets desctructed when shared_ptr goes out of scope
     }
 
     // Helper function to generate sequential codes
@@ -77,8 +77,8 @@ protected:
 };
 
 // Test default constructor
-TEST_F(IndexPartitionTest, DefaultConstructorTest) {
-    IndexPartition default_partition;
+TEST_F(InMemoryIndexPartitionTest, DefaultConstructorTest) {
+    InMemoryIndexPartition default_partition;
     EXPECT_EQ(default_partition.buffer_size_, 0);
     EXPECT_EQ(default_partition.num_vectors_, 0);
     EXPECT_EQ(default_partition.code_size_, 0);
@@ -89,14 +89,14 @@ TEST_F(IndexPartitionTest, DefaultConstructorTest) {
 }
 
 // Test parameterized constructor
-TEST_F(IndexPartitionTest, ParameterizedConstructorTest) {
+TEST_F(InMemoryIndexPartitionTest, ParameterizedConstructorTest) {
     size_t num_vectors = 5;
     std::vector<uint8_t> codes;
     std::vector<idx_t> ids;
     generate_sequential_codes(num_vectors, codes, 10);
     generate_sequential_ids(num_vectors, ids, 5000);
 
-    IndexPartition param_partition(num_vectors, codes.data(), ids.data(), code_size);
+    InMemoryIndexPartition param_partition(num_vectors, codes.data(), ids.data(), code_size);
 
     EXPECT_EQ(param_partition.num_vectors_, num_vectors);
     EXPECT_EQ(param_partition.code_size_, code_size);
@@ -109,7 +109,7 @@ TEST_F(IndexPartitionTest, ParameterizedConstructorTest) {
 }
 
 // Test append method
-TEST_F(IndexPartitionTest, AppendTest) {
+TEST_F(InMemoryIndexPartitionTest, AppendTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> new_codes;
     std::vector<idx_t> new_ids;
@@ -132,7 +132,7 @@ TEST_F(IndexPartitionTest, AppendTest) {
 }
 
 // Test append with exceeding initial buffer size
-TEST_F(IndexPartitionTest, AppendExceedBufferTest) {
+TEST_F(InMemoryIndexPartitionTest, AppendExceedBufferTest) {
     size_t n_entry = initial_num_vectors + 5; // Intentionally large to test resizing
     std::vector<uint8_t> new_codes;
     std::vector<idx_t> new_ids;
@@ -155,7 +155,7 @@ TEST_F(IndexPartitionTest, AppendExceedBufferTest) {
 }
 
 // Test update method
-TEST_F(IndexPartitionTest, UpdateTest) {
+TEST_F(InMemoryIndexPartitionTest, UpdateTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -184,7 +184,7 @@ TEST_F(IndexPartitionTest, UpdateTest) {
 }
 
 // Test update with out-of-range offset
-TEST_F(IndexPartitionTest, UpdateOutOfRangeTest) {
+TEST_F(InMemoryIndexPartitionTest, UpdateOutOfRangeTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -207,7 +207,7 @@ TEST_F(IndexPartitionTest, UpdateOutOfRangeTest) {
 }
 
 // Test remove method
-TEST_F(IndexPartitionTest, RemoveTest) {
+TEST_F(InMemoryIndexPartitionTest, RemoveTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -238,7 +238,7 @@ TEST_F(IndexPartitionTest, RemoveTest) {
 }
 
 // Test remove with out-of-range index
-TEST_F(IndexPartitionTest, RemoveOutOfRangeTest) {
+TEST_F(InMemoryIndexPartitionTest, RemoveOutOfRangeTest) {
     size_t n_entry = 3;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -253,7 +253,7 @@ TEST_F(IndexPartitionTest, RemoveOutOfRangeTest) {
 }
 
 // Test resize method
-TEST_F(IndexPartitionTest, ResizeTest) {
+TEST_F(InMemoryIndexPartitionTest, ResizeTest) {
     size_t new_capacity = 20;
     partition->resize(new_capacity);
 
@@ -265,7 +265,7 @@ TEST_F(IndexPartitionTest, ResizeTest) {
 }
 
 // Test resize to smaller than num_vectors_
-TEST_F(IndexPartitionTest, ResizeSmallerThanNumVectorsTest) {
+TEST_F(InMemoryIndexPartitionTest, ResizeSmallerThanNumVectorsTest) {
     size_t n_entry = 10;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -296,7 +296,7 @@ TEST_F(IndexPartitionTest, ResizeSmallerThanNumVectorsTest) {
 }
 
 // Test clear method
-TEST_F(IndexPartitionTest, ClearTest) {
+TEST_F(InMemoryIndexPartitionTest, ClearTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -318,7 +318,7 @@ TEST_F(IndexPartitionTest, ClearTest) {
 }
 
 // Test find_id method
-TEST_F(IndexPartitionTest, FindIdTest) {
+TEST_F(InMemoryIndexPartitionTest, FindIdTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -340,9 +340,9 @@ TEST_F(IndexPartitionTest, FindIdTest) {
 }
 
 // Test set_code_size method before adding vectors
-TEST_F(IndexPartitionTest, SetCodeSizeBeforeAddingVectorsTest) {
+TEST_F(InMemoryIndexPartitionTest, SetCodeSizeBeforeAddingVectorsTest) {
     // Create a new partition with no vectors
-    IndexPartition empty_partition;
+    InMemoryIndexPartition empty_partition;
 
     // Set code_size_
     int64_t new_code_size = 32;
@@ -352,7 +352,7 @@ TEST_F(IndexPartitionTest, SetCodeSizeBeforeAddingVectorsTest) {
 }
 
 // Test set_code_size method after adding vectors (should throw)
-TEST_F(IndexPartitionTest, SetCodeSizeAfterAddingVectorsTest) {
+TEST_F(InMemoryIndexPartitionTest, SetCodeSizeAfterAddingVectorsTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -367,13 +367,13 @@ TEST_F(IndexPartitionTest, SetCodeSizeAfterAddingVectorsTest) {
 }
 
 // Test set_code_size with invalid size
-TEST_F(IndexPartitionTest, SetCodeSizeInvalidTest) {
+TEST_F(InMemoryIndexPartitionTest, SetCodeSizeInvalidTest) {
     int64_t invalid_code_size = 0;
     EXPECT_THROW(partition->set_code_size(invalid_code_size), std::runtime_error);
 }
 
 // Test move semantics do not leak or double free
-TEST_F(IndexPartitionTest, MoveSemanticsTest) {
+TEST_F(InMemoryIndexPartitionTest, MoveSemanticsTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -386,7 +386,7 @@ TEST_F(IndexPartitionTest, MoveSemanticsTest) {
     EXPECT_EQ(partition->num_vectors_, 15);
 
     // Move construct a new partition
-    IndexPartition moved_partition(std::move(*partition));
+    InMemoryIndexPartition moved_partition(std::move(*partition));
 
     // Original partition should now be empty
     EXPECT_EQ(partition->buffer_size_, 0);
@@ -424,7 +424,7 @@ TEST_F(IndexPartitionTest, MoveSemanticsTest) {
 }
 
 // Test that append properly resizes multiple times
-TEST_F(IndexPartitionTest, AppendMultipleTimesTest) {
+TEST_F(InMemoryIndexPartitionTest, AppendMultipleTimesTest) {
     size_t n_entry = 5;
     size_t append_times = 3;
     std::vector<uint8_t> codes;
@@ -469,7 +469,7 @@ TEST_F(IndexPartitionTest, AppendMultipleTimesTest) {
 
 // Test duplicate IDs
 // Test duplicate IDs
-TEST_F(IndexPartitionTest, DuplicateIdsTest) {
+TEST_F(InMemoryIndexPartitionTest, DuplicateIdsTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids = {100, 101, 102, 100, 104}; // Duplicate ID 100
@@ -494,7 +494,7 @@ TEST_F(IndexPartitionTest, DuplicateIdsTest) {
 }
 
 // Test that update does not affect other entries
-TEST_F(IndexPartitionTest, UpdateDoesNotAffectOthersTest) {
+TEST_F(InMemoryIndexPartitionTest, UpdateDoesNotAffectOthersTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -528,7 +528,7 @@ TEST_F(IndexPartitionTest, UpdateDoesNotAffectOthersTest) {
 }
 
 // Test that removing all entries leads to an empty partition
-TEST_F(IndexPartitionTest, RemoveAllEntriesTest) {
+TEST_F(InMemoryIndexPartitionTest, RemoveAllEntriesTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -547,7 +547,7 @@ TEST_F(IndexPartitionTest, RemoveAllEntriesTest) {
 }
 
 // Test that append with zero entries does not change the partition
-TEST_F(IndexPartitionTest, AppendWithZeroEntriesTest) {
+TEST_F(InMemoryIndexPartitionTest, AppendWithZeroEntriesTest) {
     size_t n_entry = 0;
     std::vector<uint8_t> new_codes;
     std::vector<idx_t> new_ids;
@@ -562,7 +562,7 @@ TEST_F(IndexPartitionTest, AppendWithZeroEntriesTest) {
 }
 
 // Test updating with zero entries throws an exception
-TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
+TEST_F(InMemoryIndexPartitionTest, UpdateWithZeroEntriesTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
     std::vector<idx_t> append_ids;
@@ -588,7 +588,7 @@ TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
     verify_codes(partition->codes_, append_codes, initial_num_vectors);
 }
 
-TEST_F(IndexPartitionTest, AppendStressTest) {
+TEST_F(InMemoryIndexPartitionTest, AppendStressTest) {
     const size_t stress_count = 10000;
     std::vector<uint8_t> stress_codes;
     std::vector<idx_t> stress_ids;
@@ -602,7 +602,7 @@ TEST_F(IndexPartitionTest, AppendStressTest) {
     EXPECT_EQ(partition->ids_[initial_num_vectors], stress_ids[0]);
 }
 
-TEST_F(IndexPartitionTest, ConcurrentFindIdTest) {
+TEST_F(InMemoryIndexPartitionTest, ConcurrentFindIdTest) {
     const size_t thread_count = 8;
     std::atomic<bool> error_found{false};
 

@@ -4,9 +4,9 @@
 // - Conform to the google style guide
 // - Use descriptive variable names
 
-#include <index_partition.h>
+#include <in_memory_index_partition.h>
 
-IndexPartition::IndexPartition(int64_t num_vectors,
+InMemoryIndexPartition::InMemoryIndexPartition(int64_t num_vectors,
                                uint8_t* codes,
                                idx_t* ids,
                                int64_t code_size) {
@@ -22,12 +22,12 @@ IndexPartition::IndexPartition(int64_t num_vectors,
 }
 
 // Move Constructor
-IndexPartition::IndexPartition(IndexPartition&& other) noexcept {
+InMemoryIndexPartition::InMemoryIndexPartition(InMemoryIndexPartition&& other) noexcept {
     move_from(std::move(other));
 }
 
 // Move Assignment Operator
-IndexPartition& IndexPartition::operator=(IndexPartition&& other) noexcept {
+InMemoryIndexPartition& InMemoryIndexPartition::operator=(InMemoryIndexPartition&& other) noexcept {
     if (this != &other) {
         clear();
         move_from(std::move(other));
@@ -35,11 +35,11 @@ IndexPartition& IndexPartition::operator=(IndexPartition&& other) noexcept {
     return *this;
 }
 
-IndexPartition::~IndexPartition() {
+InMemoryIndexPartition::~InMemoryIndexPartition() {
     clear();
 }
 
-void IndexPartition::set_code_size(int64_t code_size) {
+void InMemoryIndexPartition::set_code_size(int64_t code_size) {
     if (code_size <= 0) {
         throw std::runtime_error("Invalid code_size");
     }
@@ -49,7 +49,7 @@ void IndexPartition::set_code_size(int64_t code_size) {
     code_size_ = code_size;
 }
 
-void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
+void InMemoryIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
     if (n_entry <= 0) return;
     ensure_capacity(num_vectors_ + n_entry);
     const size_t code_bytes = static_cast<size_t>(code_size_);
@@ -64,7 +64,7 @@ void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t
     // }
 }
 
-void IndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
+void InMemoryIndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
     if (n_entry <= 0) {
         throw std::runtime_error("n_entry must be positive in update");
     }
@@ -76,7 +76,7 @@ void IndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_id
     std::memcpy(ids_ + offset, new_ids, n_entry * sizeof(idx_t));
 }
 
-void IndexPartition::remove(int64_t index) {
+void InMemoryIndexPartition::remove(int64_t index) {
     if (index < 0 || index >= num_vectors_) {
         throw std::runtime_error("Index out of range in remove");
     }
@@ -101,7 +101,7 @@ void IndexPartition::remove(int64_t index) {
     num_vectors_--;
 }
 
-void IndexPartition::resize(int64_t new_capacity) {
+void InMemoryIndexPartition::resize(int64_t new_capacity) {
     if (new_capacity < 0) {
         throw std::runtime_error("Invalid new_capacity in resize");
     }
@@ -115,7 +115,7 @@ void IndexPartition::resize(int64_t new_capacity) {
     }
 }
 
-void IndexPartition::clear() {
+void InMemoryIndexPartition::clear() {
     free_memory();
     numa_node_ = -1;
     core_id_ = -1;
@@ -126,7 +126,7 @@ void IndexPartition::clear() {
     ids_ = nullptr;
 }
 
-int64_t IndexPartition::find_id(idx_t id) const {
+int64_t InMemoryIndexPartition::find_id(idx_t id) const {
 
     // use map
     // auto it = id_to_index_.find(id);
@@ -144,12 +144,12 @@ int64_t IndexPartition::find_id(idx_t id) const {
     return -1;
 }
 
-void IndexPartition::set_core_id(int core_id) {
+void InMemoryIndexPartition::set_core_id(int core_id) {
     core_id_ = core_id;
 }
 
 #ifdef QUAKE_USE_NUMA
-void IndexPartition::set_numa_node(int new_numa_node) {
+void InMemoryIndexPartition::set_numa_node(int new_numa_node) {
     if (new_numa_node == numa_node_) {
         return; // no change
     }
@@ -184,7 +184,7 @@ void IndexPartition::set_numa_node(int new_numa_node) {
 }
 #endif
 
-void IndexPartition::move_from(IndexPartition&& other) {
+void InMemoryIndexPartition::move_from(InMemoryIndexPartition&& other) {
     numa_node_ = other.numa_node_;
     core_id_ = other.core_id_;
     buffer_size_ = other.buffer_size_;
@@ -200,7 +200,7 @@ void IndexPartition::move_from(IndexPartition&& other) {
     other.code_size_ = 0;
 }
 
-void IndexPartition::free_memory() {
+void InMemoryIndexPartition::free_memory() {
     if (codes_ == nullptr && ids_ == nullptr) {
         return;
     }
@@ -221,7 +221,7 @@ void IndexPartition::free_memory() {
     ids_ = nullptr;
 }
 
-void IndexPartition::reallocate_memory(int64_t new_capacity) {
+void InMemoryIndexPartition::reallocate_memory(int64_t new_capacity) {
     if (new_capacity < num_vectors_) {
         num_vectors_ = new_capacity;
     }
@@ -244,7 +244,7 @@ void IndexPartition::reallocate_memory(int64_t new_capacity) {
     buffer_size_ = new_capacity;
 }
 
-void IndexPartition::ensure_capacity(int64_t required) {
+void InMemoryIndexPartition::ensure_capacity(int64_t required) {
     if (required > buffer_size_) {
         int64_t new_capacity = std::max<int64_t>(1024, buffer_size_);
         while (new_capacity < required) {
@@ -255,7 +255,7 @@ void IndexPartition::ensure_capacity(int64_t required) {
 }
 
 template <typename T>
-T* IndexPartition::allocate_memory(size_t num_elements, int numa_node) {
+T* InMemoryIndexPartition::allocate_memory(size_t num_elements, int numa_node) {
     size_t total_bytes = num_elements * sizeof(T);
     T* ptr = nullptr;
 #ifdef QUAKE_USE_NUMA

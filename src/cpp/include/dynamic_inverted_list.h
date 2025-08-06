@@ -12,7 +12,7 @@
 
 #include <common.h>
 #include <faiss/invlists/InvertedLists.h>
-#include <index_partition.h>
+#include <in_memory_index_partition.h>
 
 namespace faiss {
     /**
