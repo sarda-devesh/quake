@@ -28,6 +28,10 @@ if(QUAKE_USE_NUMA)
     add_compile_definitions(QUAKE_USE_NUMA)
 endif()
 
+if(ARROW_LINK_STATIC)
+    add_compile_definitions(ARROW_LINK_STATIC)
+endif()
+
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -96,6 +100,7 @@ endif()
 # ---------------------------------------------------------------
 # Find Required Packages
 # ---------------------------------------------------------------
+find_package(Arrow REQUIRED)
 find_package(Torch REQUIRED)
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
@@ -152,6 +157,12 @@ elseif(UNIX)
 else()
     # unsupported platform
     message(FATAL_ERROR "Unsupported platform")
+endif()
+
+if(ARROW_LINK_STATIC)
+    list(APPEND LINK_LIBS Arrow::arrow_static)
+else()
+    list(APPEND LINK_LIBS Arrow::arrow_shared)
 endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})

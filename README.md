@@ -137,7 +137,8 @@ For detailed instructions and advanced usage, please see the documentation: http
 - [API Documentation](http://marius-project.org/quake/api)
 
 ---
+
 ### Contact
 
 For questions or contributions, please open an issue or reach out to jasonmohoney@gmail.com
-   
+

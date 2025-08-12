@@ -7,8 +7,12 @@ dependencies:
   - python=3.11
   - numpy
   - pandas
+  - pytorch-cpu
   - faiss-cpu
+  - grpc-cpp
   - matplotlib
+  - arrow-cpp
+  - compilers
   - pytest
   - pip
   - pip:

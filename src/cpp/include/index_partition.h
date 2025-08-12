@@ -14,6 +14,7 @@
  */
 enum IndexPartitionType {
     InMemory, ///< In-memory index partition
+    OnDiskArrow, ///< On Disk in Arrow format
 };
 
 /**
@@ -70,6 +71,15 @@ public:
      * @param code_size The size in bytes for each vector code.
      */
     virtual void set_code_size(int64_t code_size) = 0;
+
+    /**
+     * @brief Set the id for this partition
+     *
+     * Used to assign/reassign ids to the current partition 
+     * 
+     * @param partition_id The id to assign to this partition 
+     */
+    virtual void set_partition_id(size_t partition_id) = 0;
 
     /**
      * @brief Append new entries to the partition.

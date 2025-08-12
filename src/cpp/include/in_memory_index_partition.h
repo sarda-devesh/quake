@@ -19,6 +19,7 @@
  */
 class InMemoryIndexPartition : public IndexPartition {
 public:
+    size_t partition_id_ = 0; ///< The id associated with the given partition
     int numa_node_ = -1;    ///< Assigned NUMA node (-1 if not set)
     int core_id_ = -1;    ///< Mapped thread ID for processing
 
@@ -102,6 +103,17 @@ public:
     */
     int64_t get_num_vectors() override { 
         return num_vectors_;
+    }
+
+    /**
+     * @brief Set the id for this partition
+     *
+     * Used to assign/reassign ids to the current partition 
+     * 
+     * @param partition_id The id to assign to this partition 
+     */
+    void set_partition_id(size_t partition_id) override { 
+        partition_id_ = partition_id;
     }
 
     /**

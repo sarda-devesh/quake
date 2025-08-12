@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 # -----------------------------
 # Set up environment variables
@@ -15,6 +15,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       wget \
       curl \
+      vim  \
       build-essential \
       autoconf \
       libtool \
@@ -51,29 +52,6 @@ COPY conda.yaml /tmp/conda.yaml
 
 # Create quake-env
 RUN conda env create -f /tmp/conda.yaml && conda clean -afy
-
-# -----------------------------
-# Install PyTorch (CPU-only)
-# -----------------------------
-RUN conda run -n quake-env pip install torch --index-url https://download.pytorch.org/whl/cpu
-
-# -----------------------------
-# Install grpc
-# -----------------------------
-RUN mkdir -p /dependencies
-WORKDIR /dependencies
-RUN git clone --recurse-submodules -b v1.74.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc
-WORKDIR /dependencies/grpc
-
-RUN mkdir -p build
-WORKDIR /dependencies/grpc/build
-RUN cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR ..
-RUN make -j$(nproc) && make install
-
-RUN echo "===== DEBUG: which conda =====" && which conda
-RUN echo "===== DEBUG: conda info =====" && conda info
-RUN echo "===== DEBUG: conda env list =====" && conda env list
-RUN echo "===== DEBUG: quake-env check =====" && conda run -n quake-env python -c "import sys; print('OK in quake-env; python:', sys.executable)"
 
 # Activates quake-env at runtime beginning
 RUN mkdir -p /working_dir
