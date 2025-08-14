@@ -126,7 +126,7 @@ void InMemoryIndexPartition::clear() {
     ids_ = nullptr;
 }
 
-int64_t InMemoryIndexPartition::find_id(idx_t id) const {
+int64_t InMemoryIndexPartition::find_id(idx_t id) {
 
     // use map
     // auto it = id_to_index_.find(id);

@@ -17,6 +17,8 @@
 #include <sstream>
 #include <cassert>
 #include <chrono>
+#include <cstdio>
+#include <fstream>
 
 /**
  * @brief A struct that represents a version of the partition that is stored on disk. 
@@ -185,7 +187,7 @@ public:
      * @param id The vector ID to search for.
      * @return The index of the vector if found; -1 otherwise.
      */
-    int64_t find_id(idx_t id) const override;
+    int64_t find_id(idx_t id) override;
 
     /**
      * @brief Saves a new version of the partition to disk 

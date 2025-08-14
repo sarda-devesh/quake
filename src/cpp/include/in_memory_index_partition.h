@@ -191,7 +191,7 @@ public:
      * @param id The vector ID to search for.
      * @return The index of the vector if found; -1 otherwise.
      */
-    int64_t find_id(idx_t id) const override;
+    int64_t find_id(idx_t id) override;
 
     /**
      * @brief Reallocate internal memory to a new capacity.

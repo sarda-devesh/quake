@@ -137,7 +137,7 @@ public:
      * @param id The vector ID to search for.
      * @return The index of the vector if found; -1 otherwise.
      */
-    virtual int64_t find_id(idx_t id) const = 0;
+    virtual int64_t find_id(idx_t id) = 0;
 }; 
 
 #endif //INDEX_PARTITION_H

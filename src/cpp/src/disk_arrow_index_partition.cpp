@@ -92,52 +92,171 @@ int64_t OnDiskArrowIndexPartition::get_num_vectors() {
 }
 
 void OnDiskArrowIndexPartition::set_partition_id(size_t partition_id) { 
+    // Update the id associated with this partition 
+    partition_id_ = partition_id;
 
+    // Also determine the paths for the new versions file
+    auto current_time = std::chrono::system_clock::now();
+    int64_t new_version_timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(current_time.time_since_epoch()).count();
+    std::stringstream file_name_stream;
+    file_name_stream << "partition_" << partition_id_ << "_" << new_version_timestamp;
+    std::filesystem::path new_common_save_path = file_name_stream.str();
+    std::filesystem::path new_vector_save_path = new_common_save_path; new_vector_save_path.concat(".vectors");
+    std::filesystem::path new_ids_save_path = new_common_save_path; new_ids_save_path.concat(".idxs");
+
+    // Now create the new version by copying the files from the old version as the data says the same
+    DiskArrowPartitionVersion& latest_version_details = partition_versions_[partition_versions_.size() - 1];
+    std::filesystem::path src_vectors_path = latest_version_details.data_path_; src_vectors_path.concat(".vectors");
+    std::filesystem::copy(src_vectors_path, new_vector_save_path, std::filesystem::copy_options::overwrite_existing);
+
+    std::filesystem::path src_ids_path = latest_version_details.data_path_; src_ids_path.concat(".idxs");
+    std::filesystem::copy(src_ids_path, new_ids_save_path, std::filesystem::copy_options::overwrite_existing);
+
+    // Finally save the new version
+    size_t num_existing_versions = partition_versions_.size();
+    DiskArrowPartitionVersion new_parition_version = {
+        static_cast<int64_t>(num_existing_versions),
+        new_version_timestamp,
+        latest_version_details.num_vectors_,
+        new_common_save_path 
+    };
+    partition_versions_.push_back(new_parition_version);
 }
 
 void OnDiskArrowIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) { 
+    if(n_entry == 0) {
+        return;
+    }
 
+    // Allocate buffer for the new vectors
+    DiskArrowPartitionVersion& latest_version_details = partition_versions_[partition_versions_.size() - 1];
+    int64_t num_curr_vectors = latest_version_details.num_vectors_;
+    int64_t num_new_vectors = num_curr_vectors + n_entry; 
+    uint8_t* codes_ptr = reinterpret_cast<uint8_t*>(std::malloc(num_new_vectors * code_size_));
+    idx_t* ids_ptr = reinterpret_cast<idx_t*>(std::malloc(num_new_vectors * sizeof(idx_t)));
+
+    // Read the existing vectors and ids from disk
+    std::filesystem::path vectors_path = latest_version_details.data_path_; vectors_path.concat(".vectors");
+    read_buffer_from_disk(vectors_path, codes_ptr, num_curr_vectors * code_size_);
+
+    std::filesystem::path ids_path = latest_version_details.data_path_; ids_path.concat(".idxs");
+    read_buffer_from_disk(ids_path, reinterpret_cast<uint8_t*>(ids_ptr), num_curr_vectors * sizeof(idx_t));
+
+    // Now append the values and write back the updated valeus to disk
+    std::memcpy(codes_ptr + num_curr_vectors * code_size_, new_codes, n_entry * code_size_);
+    std::memcpy(ids_ptr + num_curr_vectors, new_ids, n_entry * sizeof(idx_t));
+    add_new_partition_version(codes_ptr, ids_ptr, num_new_vectors);
+
+    // Free the allocated buffer because we only allocate the buffer for this method
+    std::free(codes_ptr); std:;free(ids_ptr);
 }
 
 void OnDiskArrowIndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) { 
+    // Validate input arguments
+    if (n_entry <= 0) {
+        throw std::runtime_error("n_entry must be positive in update");
+    }
 
+    DiskArrowPartitionVersion& latest_version_details = partition_versions_[partition_versions_.size() - 1];
+    int64_t num_curr_vectors = latest_version_details.num_vectors_;
+    if (offset < 0 || offset + n_entry > num_curr_vectors) {
+        throw std::runtime_error("Offset + n_entry out of range in update");
+    }
+
+    // Load the existing vectors
+    uint8_t* codes_ptr = reinterpret_cast<uint8_t*>(std::malloc(num_curr_vectors * code_size_));
+    idx_t* ids_ptr = reinterpret_cast<idx_t*>(std::malloc(num_curr_vectors * sizeof(idx_t)));
+
+    // Read the existing vectors and ids from disk
+    std::filesystem::path vectors_path = latest_version_details.data_path_; vectors_path.concat(".vectors");
+    read_buffer_from_disk(vectors_path, codes_ptr, num_curr_vectors * code_size_);
+
+    std::filesystem::path ids_path = latest_version_details.data_path_; ids_path.concat(".idxs");
+    read_buffer_from_disk(ids_path, reinterpret_cast<uint8_t*>(ids_ptr), num_curr_vectors * sizeof(idx_t));
+
+    // Update the vectors from the specified offsets and save them as a new version
+    std::memcpy(codes_ptr + offset * code_size_, new_codes, n_entry * code_size_);
+    std::memcpy(ids_ptr + offset, new_ids, n_entry * sizeof(idx_t));
+    add_new_partition_version(codes_ptr, ids_ptr, num_curr_vectors);
+
+    // Free the allocated buffer because we only allocate the buffer for this method
+    std::free(codes_ptr); std:;free(ids_ptr);
 }
 
 void OnDiskArrowIndexPartition::remove(int64_t index) { 
+    DiskArrowPartitionVersion& latest_version_details = partition_versions_[partition_versions_.size() - 1];
+    int64_t num_curr_vectors = latest_version_details.num_vectors_;
+    if (index < 0 || index >= num_curr_vectors) {
+        throw std::runtime_error("Index out of range in remove");
+    }
 
+    // Load the existing vectors
+    uint8_t* codes_ptr = reinterpret_cast<uint8_t*>(std::malloc(num_curr_vectors * code_size_));
+    idx_t* ids_ptr = reinterpret_cast<idx_t*>(std::malloc(num_curr_vectors * sizeof(idx_t)));
+
+    // Read the existing vectors and ids from disk
+    std::filesystem::path vectors_path = latest_version_details.data_path_; vectors_path.concat(".vectors");
+    read_buffer_from_disk(vectors_path, codes_ptr, num_curr_vectors * code_size_);
+
+    std::filesystem::path ids_path = latest_version_details.data_path_; ids_path.concat(".idxs");
+    read_buffer_from_disk(ids_path, reinterpret_cast<uint8_t*>(ids_ptr), num_curr_vectors * sizeof(idx_t));
+
+    // Swap the element at the specified index with the element at the last index and save this as a new version
+    int64_t last_element_idx = num_curr_vectors - 1;
+    std::memcpy(codes_ptr + index * code_size_, codes_ptr + last_element_idx * code_size_, code_size_);
+    ids_ptr[index] = ids_ptr[last_element_idx];
+    add_new_partition_version(codes_ptr, ids_ptr, last_element_idx);
+
+    // Free the allocated buffer because we only allocate the buffer for this method
+    std::free(codes_ptr); std:;free(ids_ptr);
 }
 
 void OnDiskArrowIndexPartition::resize(int64_t new_capacity) { 
     // This is a no op as we don't allocate any buffers in memory
+
 }
 
 void OnDiskArrowIndexPartition::clear() { 
-    
+    // Clear by making a new version that is emtpy
+    add_new_partition_version(nullptr, nullptr, 0);
 }
 
-int64_t OnDiskArrowIndexPartition::find_id(idx_t id) const { 
+int64_t OnDiskArrowIndexPartition::find_id(idx_t id) { 
+    int64_t num_ids = get_num_vectors();
+    const idx_t* ids_copy_ptr = get_ids();
+    for(int64_t i = 0; i < num_ids; i++) { 
+        if(ids_copy_ptr[i] == id) { 
+            return i;
+        }
+    }
+
     return -1;
 }
 
 void OnDiskArrowIndexPartition::add_new_partition_version(const uint8_t* codes, const idx_t* ids, int64_t num_vectors) {
-    // Determine the prefix of the save path
-    std::stringstream file_name_stream;
-    size_t num_existing_versions = partition_versions_.size();
-    file_name_stream << "partition_" << partition_id_ << "_version_" << num_existing_versions;
-    std::filesystem::path common_save_path = file_name_stream.str();
-
-    // First write the vectors to disk
-    std::filesystem::path vector_save_path = common_save_path; vector_save_path.concat(".vectors");
-    write_buffer_to_disk(codes, num_vectors * code_size_ * sizeof(uint8_t), vector_save_path); 
-
-    // Now write the ids to disk
-    std::filesystem::path ids_save_path = common_save_path; ids_save_path.concat(".idxs");
-    write_buffer_to_disk(reinterpret_cast<const uint8_t*>(ids), num_vectors * sizeof(idx_t), ids_save_path); 
-
-    // Finally save this partition
     auto current_time = std::chrono::system_clock::now();
     int64_t version_timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(current_time.time_since_epoch()).count();
+    
+    // Determine the prefix of the save path
+    std::stringstream file_name_stream;
+    file_name_stream << "partition_" << partition_id_ << "_" << version_timestamp;
+    std::filesystem::path common_save_path = file_name_stream.str();
 
+    // Now write the vectors and ids to disk
+    std::filesystem::path vector_save_path = common_save_path; vector_save_path.concat(".vectors");
+    std::filesystem::path ids_save_path = common_save_path; ids_save_path.concat(".idxs");
+
+    // Now persist the data for this version to disk
+    if(num_vectors > 0) { 
+        write_buffer_to_disk(codes, num_vectors * code_size_ * sizeof(uint8_t), vector_save_path); 
+        write_buffer_to_disk(reinterpret_cast<const uint8_t*>(ids), num_vectors * sizeof(idx_t), ids_save_path); 
+    } else { 
+        std::ofstream code_file(vector_save_path);
+        std::ofstream ids_file(ids_save_path);
+    }
+
+    // Finally save this partition
+    size_t num_existing_versions = partition_versions_.size();
     DiskArrowPartitionVersion new_parition_version = {
         static_cast<int64_t>(num_existing_versions),
         version_timestamp,
