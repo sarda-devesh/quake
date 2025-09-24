@@ -104,6 +104,9 @@ find_package(Arrow REQUIRED)
 find_package(Torch REQUIRED)
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
+find_package(gRPC CONFIG REQUIRED)
+find_package(Protobuf REQUIRED)
+find_package(absl REQUIRED)
 
 message(STATUS "Torch include dir: ${TORCH_INCLUDE_DIRS}")
 message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")
@@ -112,6 +115,76 @@ message(STATUS "Python include dir: ${Python3_INCLUDE_DIRS}")
 set(PYTHON_INCLUDE_DIR ${Python3_INCLUDE_DIRS})
 
 add_subdirectory(${project_THIRD_PARTY_DIR})
+
+# ---------------------------------------------------------------
+# Protobuf Dependencies
+# ---------------------------------------------------------------
+
+# Set variables for gRPC and Protobuf
+set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
+set(_GRPC_GRPCPP gRPC::grpc++)
+set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
+
+# Proto files directory
+set(PROTO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/protos")
+file(GLOB PROTO_FILES "${PROTO_DIR}/*.proto")
+
+# Variables for generated sources and headers
+set(PROTO_SRCS "")
+set(PROTO_HDRS "")
+set(GRPC_SRCS "")
+set(GRPC_HDRS "")
+
+# Loop over all proto files and generate commands
+foreach(proto_file ${PROTO_FILES})
+  get_filename_component(proto_name ${proto_file} NAME_WE)
+  get_filename_component(proto_file_path ${proto_file} PATH)
+
+  set(proto_src "${CMAKE_CURRENT_BINARY_DIR}/${proto_name}.pb.cc")
+  set(proto_hdr "${CMAKE_CURRENT_BINARY_DIR}/${proto_name}.pb.h")
+  set(grpc_src "${CMAKE_CURRENT_BINARY_DIR}/${proto_name}.grpc.pb.cc")
+  set(grpc_hdr "${CMAKE_CURRENT_BINARY_DIR}/${proto_name}.grpc.pb.h")
+
+  add_custom_command(
+    OUTPUT ${proto_src} ${proto_hdr} ${grpc_src} ${grpc_hdr}
+    COMMAND ${_PROTOBUF_PROTOC}
+    ARGS --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
+        --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
+        -I "${proto_file_path}"
+        --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
+        "${proto_file}"
+    DEPENDS ${proto_file}
+  )
+
+  list(APPEND PROTO_SRCS ${proto_src})
+  list(APPEND PROTO_HDRS ${proto_hdr})
+  list(APPEND GRPC_SRCS ${grpc_src})
+  list(APPEND GRPC_HDRS ${grpc_hdr})
+  message(STATUS "Adding dependencies for proto file: ${proto_file}")
+endforeach()
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+add_library(my_proto_lib
+  ${PROTO_SRCS} ${PROTO_HDRS}
+  ${GRPC_SRCS} ${GRPC_HDRS}
+)
+
+target_link_libraries(my_proto_lib
+  ${_GRPC_GRPCPP}
+  ${_PROTOBUF_LIBPROTOBUF}
+)
+
+target_include_directories(my_proto_lib PUBLIC
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${Protobuf_INCLUDE_DIRS}
+  ${gRPC_INCLUDE_DIRS}
+)
+
+# Needed to avoid protobuf undefined symbol issue.
+# See https://stackoverflow.com/questions/73047153/protobuf-ld-undefined-symbol-internalmetadata
+# for details
+target_compile_definitions(my_proto_lib PUBLIC -DNDEBUG)
 
 # ---------------------------------------------------------------
 # Sources and Library
@@ -154,6 +227,8 @@ elseif(UNIX)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
+
+    list(APPEND LINK_LIBS my_proto_lib absl::flags absl::flags_parse absl::strings)
 else()
     # unsupported platform
     message(FATAL_ERROR "Unsupported platform")
@@ -191,11 +266,11 @@ add_custom_target(bindings)
 add_dependencies(bindings _bindings)
 
 # ---------------------------------------------------------------
-# Benchmarks
+# Leviathan
 # ---------------------------------------------------------------
-file(GLOB BENCHMARK_SOURCES "src/cpp/test/benchmark/*.cpp")
+file(GLOB LEVIATHAN_SRCS "src/cpp/leaviathan/*.cpp")
 
-foreach(SOURCE ${BENCHMARK_SOURCES})
+foreach(SOURCE ${LEVIATHAN_SRCS})
     get_filename_component(EXECUTABLE_NAME ${SOURCE} NAME_WE)
     add_executable(${EXECUTABLE_NAME} ${SOURCE})
     target_link_libraries(${EXECUTABLE_NAME} PUBLIC ${LINK_LIBS} ${PROJECT_NAME})
@@ -206,6 +281,7 @@ foreach(SOURCE ${BENCHMARK_SOURCES})
             faiss
     )
     target_compile_features(${EXECUTABLE_NAME} PRIVATE cxx_std_17)
+    message(STATUS "Building executable for worker: ${EXECUTABLE_NAME}")
 endforeach()
 
 # ---------------------------------------------------------------

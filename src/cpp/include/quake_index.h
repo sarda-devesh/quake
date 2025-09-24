@@ -26,14 +26,16 @@ public:
     shared_ptr<IndexBuildParams> build_params_; ///< Parameters for building the index.
     shared_ptr<MaintenancePolicyParams> maintenance_policy_params_; ///< Parameters for the maintenance policy.
     int current_level_ = 0; ///< Current level of the index.
+    int index_id_ = -1; ///< The id associated with the index
 
     bool debug_ = false; ///< If true, print debug information.
 
     /**
      * @brief Constructor for QuakeIndex.
+     * @param index_id The id associated with the index
      * @param current_level The current level of the index.
      */
-    QuakeIndex(int current_level = 0);
+    QuakeIndex(int index_id = -1, int current_level = 0);
 
     /**
      * @brief Destructor.

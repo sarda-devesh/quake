@@ -7,7 +7,7 @@
 #include "clustering.h"
 #include <faiss/IndexFlat.h>
 #include "faiss/Clustering.h"
-#include "in_memory_index_partition.h"
+#include "partitions/in_memory_index_partition.h"
 #include <list_scanning.h>
 
 shared_ptr<Clustering> kmeans(Tensor vectors,

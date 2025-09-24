@@ -4,7 +4,7 @@
 // - Conform to the google style guide
 // - Use descriptive variable names
 
-#include <disk_arrow_index_partition.h>
+#include <partitions/disk_arrow_index_partition.h>
 
 OnDiskArrowIndexPartition::OnDiskArrowIndexPartition(size_t partition_id, 
                                int64_t num_vectors,

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package storagenode;
+
+service StorageNode { 
+    // Add a new partition to the storage node
+    rpc AddNewPartition (google.protobuf.Empty) returns (google.protobuf.Empty) { }
+}

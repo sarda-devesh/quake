@@ -8,7 +8,7 @@
 #define IN_MEM_INDEX_PARTITION_H
 
 #include <common.h>
-#include <index_partition.h>
+#include <partitions/index_partition.h>
 
 /**
  * @brief Represents a partition of encoded vectors that are stored in memory

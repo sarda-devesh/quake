@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package coordinator;
+
+service Coordinator {
+  // Register a Compute Worker
+  rpc RegisterCompute (RegisterComputeRequest) returns (google.protobuf.Empty) { }
+
+  // Register a Storage Worker
+  rpc RegisterStorage (RegisterStorageRequest) returns (google.protobuf.Empty) { }
+}
+
+// The request sent by the workers to register themselves with the coordinator
+message RegisterComputeRequest { 
+  int32 service_port = 1;
+}
+
+message RegisterStorageRequest { 
+  int32 service_port = 1;
+}
+
+// Message used to register a new partition to the partition map
+message NewPartionRequest { 
+
+}

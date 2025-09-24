@@ -1,7 +1,7 @@
 // index_partition_test.cpp
 
 #include <gtest/gtest.h>
-#include "in_memory_index_partition.h"  // Include the InMemoryIndexPartition header
+#include "partitions/in_memory_index_partition.h"  // Include the InMemoryIndexPartition header
 #include <vector>
 #include <cstring>
 

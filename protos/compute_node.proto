@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package computenode;
+
+service ComputeNode { 
+    // Create a new test index based on the specified parameter
+    rpc CreateNewIndex (NewIndexRequest) returns (NewIndexReply) { }
+
+    // Perform search over an existing index
+    rpc SearchIndex (SearchIndexRequest) returns (SearchIndexReply) { }
+}
+
+// Messages used to create a new index
+message NewIndexRequest { 
+    int32 vector_dimension = 1;
+    int32 num_vectors = 2;
+    int32 num_clusters = 3; 
+}
+
+message NewIndexReply { 
+    int32 index_id = 1;
+}
+
+message SearchIndexRequest { 
+    int32 index_id = 1;
+    int32 top_k = 2;
+    int32 num_probe = 3;
+    float recall_target = 4;
+    repeated float search_vectors = 5;
+}
+
+message SearchIndexReply { 
+    repeated float result_distances = 1;
+    repeated int64 result_ids = 2;
+}

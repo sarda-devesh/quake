@@ -8,7 +8,7 @@
 #include <clustering.h>
 #include <fstream>
 
-QuakeIndex::QuakeIndex(int current_level) {
+QuakeIndex::QuakeIndex(int index_id, int current_level) {
     // Initialize the QuakeIndex
     parent_ = nullptr;
     partition_manager_ = nullptr;
@@ -16,6 +16,7 @@ QuakeIndex::QuakeIndex(int current_level) {
     build_params_ = nullptr;
     maintenance_policy_params_ = nullptr;
     current_level_ = current_level;
+    index_id_ = index_id;
 }
 
 QuakeIndex::~QuakeIndex() {
@@ -54,7 +55,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
         auto s2 = std::chrono::high_resolution_clock::now();
         // create parent index over the centroids, assume is flat for now
-        parent_ = make_shared<QuakeIndex>(current_level_ + 1);
+        parent_ = make_shared<QuakeIndex>(index_id_, current_level_ + 1);
         auto parent_build_params = make_shared<IndexBuildParams>();
         parent_build_params->metric = build_params_->metric;
         parent_build_params->num_workers = build_params_->num_workers;

@@ -5,7 +5,7 @@
 #include <cstring>
 #include <chrono>
 
-#include "disk_arrow_index_partition.h"  // Include the OnDiskArrowIndexPartition header
+#include "partitions/disk_arrow_index_partition.h"  // Include the OnDiskArrowIndexPartition header
 
 using namespace faiss;
 

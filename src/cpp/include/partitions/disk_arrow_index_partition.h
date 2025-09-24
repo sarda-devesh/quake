@@ -7,7 +7,7 @@
 #ifndef ON_DISK_ARROW_INDEX_PARTITION_H
 #define ON_DISK_ARROW_INDEX_PARTITION_H
 
-#include <index_partition.h>
+#include <partitions/index_partition.h>
 
 #include <common.h>
 #include <arrow/api.h>

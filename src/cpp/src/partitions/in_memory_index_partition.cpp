@@ -4,7 +4,7 @@
 // - Conform to the google style guide
 // - Use descriptive variable names
 
-#include <in_memory_index_partition.h>
+#include <partitions/in_memory_index_partition.h>
 
 InMemoryIndexPartition::InMemoryIndexPartition(int64_t num_vectors,
                                uint8_t* codes,
