@@ -30,7 +30,7 @@ struct SearchIndexResult {
  * @brief Wrapper to interact with a compute node via gRPC.
  *
  * The ComputeClient is a client-side wrapper that facilitates communication
- * with a compute node via gRPC. All communication with the compute node
+ * with a compute node via gRPC. All communication with a compute node
  * should be done through this class.
  */
 class ComputeClient { 

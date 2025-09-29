@@ -117,6 +117,12 @@ struct MaintenancePolicyParams {
     MaintenancePolicyParams() = default;
 };
 
+struct DistributedIndexDetails { 
+    int index_id; // The global id associated with the new index
+    std::vector<size_t> partition_ids; // The globabl id for each of the index's partitions
+    std::vector<std::string> partition_storage_nodes; // The storage nodes associated with the new index
+};
+
 /**
  * @brief Parameters that govern how the DynamicIVF index should be built.
  */
@@ -138,6 +144,7 @@ struct IndexBuildParams {
     bool verbose = false;
 
     shared_ptr<IndexBuildParams> parent_params = nullptr;
+    shared_ptr<DistributedIndexDetails> distributed_index_details = nullptr; // Parameters related to storing the leaf level partitions remotely
 
     IndexBuildParams() = default;
 };

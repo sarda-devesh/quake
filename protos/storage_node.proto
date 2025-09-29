@@ -6,5 +6,41 @@ package storagenode;
 
 service StorageNode { 
     // Add a new partition to the storage node
-    rpc AddNewPartition (google.protobuf.Empty) returns (google.protobuf.Empty) { }
+    rpc AddNewPartition(RegisterPartitionRequest) returns (google.protobuf.Empty) { }
+
+    // Add vectors to an existing partition
+    rpc AddVectors(AddVectorRequest) returns (google.protobuf.Empty) { }
+
+    // Perform vector search on the specified partition
+    rpc PerformSearch(PerformSearchRequest) returns (PerformSearchResponse) { }
+}
+
+message RegisterPartitionRequest { 
+    uint32 partition_id = 2;
+    int64 code_size = 3;
+}
+
+message AddVectorRequest { 
+    uint32 partition_id = 1;
+    int64 num_vectors = 2;
+    repeated int64 vector_ids = 3;
+    repeated float vector_values = 4;
+}
+
+message PerformSearchRequest { 
+    uint32 partition_id = 1;
+    uint32 k = 2;
+    int32 num_queries = 3;
+    repeated float query_vectors = 4;
+
+    enum DistanceMetric {
+        INNER_PRODUCT = 0;
+        L2 = 1;
+    }
+    DistanceMetric distance_metric = 5;
+}
+
+message PerformSearchResponse { 
+    repeated int64 vector_ids = 1;
+    repeated float vector_distances = 2;
 }

@@ -266,12 +266,34 @@ namespace faiss {
         nlist--;
     }
 
-    void DynamicInvertedLists::add_list(size_t list_no) {
+    void DynamicInvertedLists::add_list(size_t list_no, std::shared_ptr<PartitionInitializeParams> initialize_parameters) {
         if (partitions_.find(list_no) != partitions_.end()) {
             throw std::runtime_error("List already exists in add_list");
         }
-        shared_ptr<IndexPartition> ip = std::make_shared<InMemoryIndexPartition>();
-        ip->set_code_size((int64_t) code_size);
+
+        // If initialize parameters are not specified then initialize it as an in memory index
+        shared_ptr<IndexPartition> ip;
+        if(initialize_parameters == nullptr) { 
+            ip = std::make_shared<InMemoryIndexPartition>();
+            ip->set_code_size((int64_t) code_size);
+        } else { 
+            // Otherwise initialize the index based on the 
+            switch (initialize_parameters->partition_type_) {
+                case IndexPartitionType::InMemory:
+                    ip = std::make_shared<InMemoryIndexPartition>();
+                    ip->set_code_size((int64_t) code_size);
+                    break;
+                case IndexPartitionType::OnDiskArrow:
+                    ip = std::make_shared<OnDiskArrowIndexPartition>(list_no, code_size); 
+                    break;
+                case IndexPartitionType::Remote:
+                    ip = std::make_shared<RemoteIndexPartition>(list_no, code_size, initialize_parameters);
+                    break;
+                default:
+                    throw std::runtime_error("Invalid partition type");
+            }
+        }
+
         partitions_[list_no] = ip;
         nlist++;
     }

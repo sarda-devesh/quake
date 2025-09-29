@@ -10,6 +10,9 @@ service Coordinator {
 
   // Register a Storage Worker
   rpc RegisterStorage (RegisterStorageRequest) returns (google.protobuf.Empty) { }
+
+  // Register a new index
+  rpc RegisterNewIndex(RegisterIndexRequest) returns (RegisterIndexReply) { }
 }
 
 // The request sent by the workers to register themselves with the coordinator
@@ -21,7 +24,13 @@ message RegisterStorageRequest {
   int32 service_port = 1;
 }
 
-// Message used to register a new partition to the partition map
-message NewPartionRequest { 
+// Messages used to register a new index with the coordinator
+message RegisterIndexRequest { 
+  int32 num_partitions = 1;
+}
 
+message RegisterIndexReply { 
+  int32 global_index_id = 1;
+  repeated uint32 partition_ids = 2;
+  repeated string partition_storage_nodes = 3;
 }

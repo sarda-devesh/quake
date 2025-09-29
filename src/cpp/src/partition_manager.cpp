@@ -33,7 +33,8 @@ PartitionManager::~PartitionManager() {
 void PartitionManager::init_partitions(
     shared_ptr<QuakeIndex> parent,
     shared_ptr<Clustering> clustering,
-    bool check_uniques
+    bool check_uniques, 
+    shared_ptr<DistributedIndexDetails> distributed_index_details
 ) {
     if (debug_) {
         std::cout << "[PartitionManager] init_partitions: Entered." << std::endl;
@@ -67,9 +68,19 @@ void PartitionManager::init_partitions(
     // Add an empty list for each partition ID
     auto partition_ids_accessor = clustering->partition_ids.accessor<int64_t, 1>();
     for (int64_t i = 0; i < nlist; i++) {
-        partition_store_->add_list(partition_ids_accessor[i]);
+        size_t partition_id = partition_ids_accessor[i];
+        if(distributed_index_details == nullptr) { 
+            partition_store_->add_list(partition_id);
+        } else { // Initialize this partition to be stored on a storage node
+            std::shared_ptr<PartitionInitializeParams> initialize_params = std::make_shared<PartitionInitializeParams>(
+                IndexPartitionType::Remote, distributed_index_details->index_id, distributed_index_details->partition_ids[partition_id], 
+                distributed_index_details->partition_storage_nodes[partition_id]
+            );
+            partition_store_->add_list(partition_id, initialize_params);
+        }
+        
         if (debug_) {
-            std::cout << "[PartitionManager] init_partitions: Added empty list for partition " << i << std::endl;
+            std::cout << "[PartitionManager] init_partitions: Added empty list for partition " << partition_id << std::endl;
         }
     }
 
@@ -99,6 +110,7 @@ void PartitionManager::init_partitions(
                     resident_ids_.insert(id_val);
                 }
             }
+
             partition_store_->add_entries(
                 partition_ids_accessor[i],
                 count,
@@ -603,10 +615,14 @@ void PartitionManager::distribute_partitions(int num_workers) {
 }
 
 void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id) {
+    std::cout << "[PartitionManager] Assigning partition " << partition_id << " to core id of " << core_id << std::endl;
     std::shared_ptr<IndexPartition> partition = partition_store_->partitions_[partition_id];
     if(partition->get_index_type() == IndexPartitionType::InMemory) { 
         shared_ptr<InMemoryIndexPartition> in_memory_partition = std::dynamic_pointer_cast<InMemoryIndexPartition>(partition);
         in_memory_partition->core_id_ = core_id;
+    } else if(partition->get_index_type() == IndexPartitionType::Remote) { 
+        shared_ptr<RemoteIndexPartition> remote_partition = std::dynamic_pointer_cast<RemoteIndexPartition>(partition);
+        remote_partition->worker_id_ = core_id;
     }
 }
 
@@ -615,6 +631,9 @@ int PartitionManager::get_partition_core_id(int64_t partition_id) {
     if(partition->get_index_type() == IndexPartitionType::InMemory) { 
         shared_ptr<InMemoryIndexPartition> in_memory_partition = std::dynamic_pointer_cast<InMemoryIndexPartition>(partition);
         return in_memory_partition->core_id_;
+    } else if(partition->get_index_type() == IndexPartitionType::Remote) { 
+        shared_ptr<RemoteIndexPartition> remote_partition = std::dynamic_pointer_cast<RemoteIndexPartition>(partition);
+        return remote_partition->worker_id_;
     } else { 
         return -1;
     }

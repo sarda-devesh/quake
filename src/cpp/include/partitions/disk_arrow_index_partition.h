@@ -56,6 +56,16 @@ public:
     OnDiskArrowIndexPartition() = default;
 
     /**
+     * @brief Parameterized constructor
+     * 
+     * Initializes an empty on disk partition
+     * 
+     * @param partition_id The id associated with this partition
+     * @param code_size Size of each code in bytes
+     */
+    OnDiskArrowIndexPartition(size_t partition_id, int64_t code_size);
+
+    /**
      * @brief Parameterized constructor.
      *
      * Initializes the partition with a given number of vectors and copies in the provided codes and IDs.
@@ -119,6 +129,7 @@ public:
      * @param code_size The size in bytes for each vector code.
      */
     void set_code_size(int64_t code_size) override { 
+        assert(partition_versions_.empty());
         code_size_ = code_size;
     }
 

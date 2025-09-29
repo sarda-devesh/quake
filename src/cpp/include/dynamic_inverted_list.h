@@ -12,7 +12,11 @@
 
 #include <common.h>
 #include <faiss/invlists/InvertedLists.h>
+
+#include <partitions/index_partition.h>
 #include <partitions/in_memory_index_partition.h>
+#include <partitions/disk_arrow_index_partition.h>
+#include<partitions/remote_index_partition.h>
 
 namespace faiss {
     /**
@@ -192,9 +196,10 @@ namespace faiss {
          * @brief Add a new, empty partition.
          *
          * @param list_no The partition number to add.
+         * @param initialize_parameters A PartitionInitializeParams that provides additional parameters to intialize the partition
          * @throws std::runtime_error if the partition already exists.
          */
-        void add_list(size_t list_no);
+        void add_list(size_t list_no, std::shared_ptr<PartitionInitializeParams> initialize_parameters = nullptr);
 
         /**
          * @brief Check if a given ID exists in a partition.

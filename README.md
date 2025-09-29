@@ -144,11 +144,13 @@ Build, run, and setup the docker container using:
 ```
 $ export CURRENT_DIR=`pwd`
 $ docker build -t leviathan:latest environments/ubuntu-cpu/.
-$ docker kill leviathan_dev || docker rm leviathan_dev
+$ docker kill leviathan_dev 
+$ docker rm leviathan_dev
 $ docker run -d -v $CURRENT_DIR:/working_dir/ --name leviathan_dev leviathan:latest sleep infinity
 $ docker exec -it leviathan_dev bash
 
-$ cmake -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DQUAKE_SET_ABI_MODE=OFF ..
+$ rm -rf build && mkdir -p build && cd build
+$ cmake -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DQUAKE_SET_ABI_MODE=OFF ..
 $ make coordinator -j$(nproc) && ./coordinator
 $ make storage_node -j$(nproc) && ./storage_node
 $ make compute_node -j$(nproc) && ./compute_node

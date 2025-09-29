@@ -46,8 +46,9 @@ public:
      * @brief Initialize partitions with a clustering
      * @param parent Pointer to the parent index over the centroids.
      * @param partitions Clustering object containing the partitions to initialize.
+     * @param distributed_index_details Metadata related to distributing the partitions to different storage nodes
      */
-    void init_partitions(shared_ptr<QuakeIndex> parent, shared_ptr<Clustering> partitions, bool check_uniques = true);
+    void init_partitions(shared_ptr<QuakeIndex> parent, shared_ptr<Clustering> partitions, bool check_uniques = true, shared_ptr<DistributedIndexDetails> distributed_index_details = nullptr);
 
     /**
     * @brief Add vectors to the appropriate partition(s).

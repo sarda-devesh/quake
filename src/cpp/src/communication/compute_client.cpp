@@ -15,7 +15,7 @@ using computenode::SearchIndexRequest;
 using computenode::SearchIndexReply;
 
 ComputeClient::ComputeClient(std::string compute_address) {
-    // Create a gRPC channel to the coordinator service
+    // Create a gRPC channel to the compute node
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(compute_address, grpc::InsecureChannelCredentials());
     stub_ = ComputeNode::NewStub(channel);
 }

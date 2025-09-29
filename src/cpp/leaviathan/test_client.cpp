@@ -4,6 +4,11 @@
 
 #include <communication/compute_client.h>
 
+#include <arrow/api.h>
+#include <iostream>
+#include <cstdlib>
+#include <cstring>
+
 ABSL_FLAG(std::string, compute_address, "localhost:9001", "Address of the compute node we want to test");
 
 

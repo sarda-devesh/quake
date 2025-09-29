@@ -41,6 +41,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
     auto start = std::chrono::high_resolution_clock::now();
 
     if (build_params_->nlist > 1) {
+
         auto s1 = std::chrono::high_resolution_clock::now();
         shared_ptr<Clustering> clustering = kmeans(
             x,
@@ -63,7 +64,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
         // initialize the partition manager
         partition_manager_ = make_shared<PartitionManager>();
-        partition_manager_->init_partitions(parent_, clustering);
+        partition_manager_->init_partitions(parent_, clustering, true, build_params_->distributed_index_details);
         auto e2 = std::chrono::high_resolution_clock::now();
         timing_info->assign_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e2 - s2).count();
     } else {
