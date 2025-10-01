@@ -23,16 +23,27 @@ int main(int argc, char** argv) {
     int d = 128;
     int num_vec = 20;
     int num_partitions = 2;
-    int index_id = compute_client->create_new_index(d, num_vec, num_partitions);
-    std::cout << "Got index with id of " << index_id << std::endl;
+    int global_index_id = compute_client->create_new_index(d, num_vec, num_partitions);
+    std::cout << "Got global index with id of " << global_index_id << std::endl;
 
     // Run some queries against it and log the result
     int num_test_queries = 2; int results_per_query = 2;
     torch::Tensor search_queries = torch::randn({num_test_queries, d}, torch::kFloat32);
-    std::shared_ptr<SearchIndexResult> query_result = compute_client->search_index(index_id, search_queries, results_per_query, 1);
+    std::shared_ptr<SearchIndexResult> query_result = compute_client->search_index(global_index_id, search_queries, results_per_query, 1);
     if(query_result->query_sucessful) { 
-        std::cout << "SUCESSS: Ids - " << query_result->ids << ", Distances - " << query_result->distances << std::endl;
+        std::cout << "NEW GLOBAL SUCESSS: Ids - " << query_result->ids << ", Distances - " << query_result->distances << std::endl;
     } else {
-        std::cout << "FAILURE: Error Message - " << query_result->error_message << std::endl;
+        std::cout << "NEW GLOBAL FAILURE: Error Message - " << query_result->error_message << std::endl;
+    }
+
+    // Now do the same with a local test index
+    int local_index_id = compute_client->create_new_index(d, num_vec, num_partitions, true);
+    std::cout << "Got local index id of " << local_index_id << std::endl;
+
+    query_result = compute_client->search_index(local_index_id, search_queries, results_per_query, 1);
+    if(query_result->query_sucessful) { 
+        std::cout << "NEW LOCAL SUCESSS: Ids - " << query_result->ids << ", Distances - " << query_result->distances << std::endl;
+    } else {
+        std::cout << "NEW LOCAL FAILURE: Error Message - " << query_result->error_message << std::endl;
     }
 }

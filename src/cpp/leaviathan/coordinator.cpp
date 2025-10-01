@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <memory>
 #include <cstdio>
+#include <utility>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
@@ -30,9 +31,10 @@ using coordinator::RegisterIndexReply;
 
 ABSL_FLAG(uint32_t, port, 5051, "Port to launch this service on");
 
-std::string MergeAddress(const std::string& host, uint16_t port) {
+std::pair<std::string, std::string> MergeAddress(const std::string& host, uint16_t port) {
   std::string host_without_port = host.substr(0, host.find_last_of(':'));
-  return absl::StrFormat("%s:%d", host_without_port, port);
+  std::string complete_address = absl::StrFormat("%s:%d", host_without_port, port);
+  return std::make_pair(host_without_port, complete_address);
 }
 
 // Structs for storing various system state
@@ -65,10 +67,10 @@ struct ComputeNode {
 };
 
 struct StorageNode { 
-  std::string storage_address_;
+  std::string storage_endpoint_;
   std::vector<std::shared_ptr<Partition>> partitions_; // The partitions that live in this storage node
 
-  StorageNode(std::string storage_address) : storage_address_(storage_address) { 
+  StorageNode(std::string storage_endpoint) : storage_endpoint_(storage_endpoint) { 
 
   }
 };
@@ -83,11 +85,10 @@ public:
 
     // Save the compute worker in the state map
     std::lock_guard<std::mutex> lock(state_mutex_);
-    std::string compute_address = context->peer();
-    std::string compute_endpoint = MergeAddress(compute_address, request->service_port());
+    auto [compute_address, compute_endpoint] = MergeAddress(context->peer(), request->service_port());
 
     compute_workers_[compute_address] = std::make_shared<ComputeNode>(compute_endpoint);
-    std::cout << "Registered compute node with address " << compute_endpoint << std::endl;
+    std::cout << "Registered compute node with address " << compute_address << " and endpoint " << compute_endpoint << std::endl;
     return Status::OK;
   }
 
@@ -97,11 +98,10 @@ public:
     
     // Save the address of the storage worker
     std::lock_guard<std::mutex> lock(state_mutex_);
-    std::string storage_address = context->peer();
-    std::string storage_endpoint = MergeAddress(storage_address, request->service_port());
+    auto [storage_address, storage_endpoint] = MergeAddress(context->peer(), request->service_port());
 
     storage_workers_[storage_address] = std::make_shared<StorageNode>(storage_endpoint);
-    std::cout << "Registered storage node with address " << storage_endpoint << std::endl;
+    std::cout << "Registered storage node with address " << storage_address << " and endpoint " << storage_endpoint << std::endl;
     return Status::OK;
   }
 
@@ -111,6 +111,7 @@ public:
 
     // Verify that this compute node is registered
     std::string compute_address = context->peer();
+    compute_address = compute_address.substr(0, compute_address.find_last_of(':'));;
     if(compute_workers_.find(compute_address) == compute_workers_.end()) { 
       return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "Unregistered compute node trying to create a new index");
     }
@@ -142,7 +143,7 @@ public:
       std::string partition_storage_key = storage_node_keys[partition_id % num_storage_nodes];
 
       storage_workers_[partition_storage_key]->partitions_.push_back(curr_partition);
-      std::string storage_node_endpoint = storage_workers_[partition_storage_key]->storage_address_;
+      std::string storage_node_endpoint = storage_workers_[partition_storage_key]->storage_endpoint_;
       result_partition_field->Add(std::string(storage_node_endpoint));
       std::cout << "For partition " << new_partition_id_counter_ << " determined storage node of " << storage_node_endpoint << std::endl; 
 

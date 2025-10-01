@@ -24,7 +24,7 @@ using google::protobuf::Empty;
 
 using computenode::ComputeNode;
 using computenode::NewIndexRequest;
-using computenode::NewIndexReply;
+using computenode::IndexCreationReply;
 using computenode::SearchIndexRequest;
 using computenode::SearchIndexReply;
 
@@ -37,15 +37,18 @@ class ComputeNodeServiceImpl final : public ComputeNode::Service {
 public:
     Status CreateNewIndex(ServerContext* context,
                         const NewIndexRequest* request,
-                        NewIndexReply* response) override {
+                        IndexCreationReply* response) override {
         
-        // Get index information from the coordinator
+        // Determine the index details based on whether it is going to be stored in memory or remotely
         int num_clusters = request->num_clusters();
-        std::shared_ptr<CoordinatorClient> coordinator_client = CoordinatorClient::GetCoordinatorClient();
-        std::cout << "Calling register_new_index with " << num_clusters << " new partititions" << std::endl;
-        std::shared_ptr<DistributedIndexDetails> new_index_details = coordinator_client->register_new_index(num_clusters);
-        int new_index_id = new_index_details->index_id;
-        std::cout << "Got new index id of " << new_index_id << " with partition id of " << new_index_details->partition_ids[0] << " and partition storage node of " << new_index_details->partition_storage_nodes[0] << std::endl;
+        std::shared_ptr<DistributedIndexDetails> new_index_details = nullptr; 
+        int new_index_id = -1 * indexes_.size(); // -1 so that it doesn't conflict with an global index id
+        if(!request->store_index_locally()) { 
+            std::shared_ptr<CoordinatorClient> coordinator_client = CoordinatorClient::GetCoordinatorClient();
+            new_index_details = coordinator_client->register_new_index(num_clusters);
+            new_index_id = new_index_details->index_id;
+        }
+        std::cout << "With store_index_locally=" << request->store_index_locally() << " determined new index id of " << new_index_id << std::endl;
 
         // Create the new index
         std::shared_ptr<QuakeIndex> new_index = std::make_shared<QuakeIndex>(new_index_id);
@@ -62,7 +65,7 @@ public:
         
         torch::Tensor build_vectors_ = torch::randn({num_vectors, vector_dimension}, torch::kFloat32);
         torch::Tensor build_ids_ = torch::arange(0, num_vectors, torch::kInt64);
-        std::cout << "[Compute Node] Building index " << new_index_id << " with details: D - " << vector_dimension << ", # vectors - " << num_vectors << ", nlist - " << num_clusters << std::endl;
+        std::cout << "[Compute Node] Building index " << new_index_id << " with details: D - " << vector_dimension << ", # vectors - " << num_vectors << ", nlist - " << num_clusters << std::endl << std::flush;
         new_index->build(build_vectors_, build_ids_, build_params);
 
         // Save the new index

@@ -10,7 +10,7 @@
 
 using grpc::Status;
 using computenode::NewIndexRequest;
-using computenode::NewIndexReply;
+using computenode::IndexCreationReply;
 using computenode::SearchIndexRequest;
 using computenode::SearchIndexReply;
 
@@ -20,7 +20,7 @@ ComputeClient::ComputeClient(std::string compute_address) {
     stub_ = ComputeNode::NewStub(channel);
 }
 
-int ComputeClient::create_new_index(int d, int num_vectors, int num_partitions) { 
+int ComputeClient::create_new_index(int d, int num_vectors, int num_partitions, bool store_index_locally) { 
     grpc::ClientContext context;
 
     // Set the request parameters
@@ -28,9 +28,10 @@ int ComputeClient::create_new_index(int d, int num_vectors, int num_partitions) 
     create_request.set_vector_dimension(d);
     create_request.set_num_vectors(num_vectors);
     create_request.set_num_clusters(num_partitions); 
+    create_request.set_store_index_locally(store_index_locally);
 
     // Make the request
-    NewIndexReply create_response; 
+    IndexCreationReply create_response; 
     grpc::Status status = stub_->CreateNewIndex(&context, create_request, &create_response);
     assert(status.ok());
 

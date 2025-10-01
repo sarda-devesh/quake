@@ -3,24 +3,34 @@ syntax = "proto3";
 package computenode;
 
 service ComputeNode { 
-    // Create a new test index based on the specified parameter
-    rpc CreateNewIndex (NewIndexRequest) returns (NewIndexReply) { }
+    // Create a new index, intialized with random vectors, based on the specified parameter
+    rpc CreateNewIndex (NewIndexRequest) returns (IndexCreationReply) { }
+
+    // Load an existing index from the specified path (disk, S3, etc...) 
+    rpc LoadExistingIndex (ExistingIndexRequest) returns (IndexCreationReply) { }
 
     // Perform search over an existing index
     rpc SearchIndex (SearchIndexRequest) returns (SearchIndexReply) { }
 }
 
-// Messages used to create a new index
+// Messages used to create new/load existing index
 message NewIndexRequest { 
     int32 vector_dimension = 1;
     int32 num_vectors = 2;
     int32 num_clusters = 3; 
+    bool store_index_locally = 4;
 }
 
-message NewIndexReply { 
+message ExistingIndexRequest { 
+    string index_uri = 1; 
+    bool store_index_locally = 2;
+}
+
+message IndexCreationReply { 
     int32 index_id = 1;
 }
 
+// Messages to search an existing index
 message SearchIndexRequest { 
     int32 index_id = 1;
     int32 top_k = 2;

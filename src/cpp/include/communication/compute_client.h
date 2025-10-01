@@ -47,10 +47,11 @@ public:
     * @param d The dimension of the vectors in the new index
     * @param num_vectors The number of vectors that should be created in the new index
     * @param num_partitions The number of partitions to initialize the new vector with
+    * @param store_index_locally Whether the index leaf partitions should be stored locally or distributed out to storage nodes
     * 
     * @return The id associated with the newly created index 
     */
-   int create_new_index(int d, int num_vectors, int num_partitions);
+   int create_new_index(int d, int num_vectors, int num_partitions, bool store_index_locally = false);
 
    /**
     * @brief Method to search an existing index in the compute node
