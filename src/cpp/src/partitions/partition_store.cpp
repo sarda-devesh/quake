@@ -17,7 +17,7 @@ void PartitionStore::add_partition(size_t partition_id, int64_t code_size) {
     }
 
     partitions_[partition_id] = std::make_shared<OnDiskArrowIndexPartition>(partition_id, code_size);
-    std::cout << "Partition Store: Created partition " << partition_id << " with code size of " << code_size << std::endl;
+    if constexpr(debug_) std::cout << "Partition Store: Created partition " << partition_id << " with code size of " << code_size << std::endl;
 }
 
 void PartitionStore::add_vectors(size_t partition_id, int64_t n_entry, const idx_t* ids, const float* codes) { 
@@ -25,7 +25,7 @@ void PartitionStore::add_vectors(size_t partition_id, int64_t n_entry, const idx
         throw std::runtime_error("Partition not in partition store");
     }
 
-    std::cout << "Partition Store: For partition " << partition_id << " adding " << n_entry << " entries" << std::endl;
+    if constexpr(debug_) std::cout << "Partition Store: For partition " << partition_id << " adding " << n_entry << " entries" << std::endl;
     partitions_[partition_id]->append(n_entry, ids, reinterpret_cast<const uint8_t*>(codes));
 }
 
@@ -86,11 +86,11 @@ void PartitionStore::perform_search(size_t partition_id, size_t k, int num_queri
     search_job.promise = promise_ptr;
     search_job.metric_type = metric;
     job_queue_.enqueue(search_job);
-    std::cout << "Submit search job to the job queue" << std::endl;
+    if constexpr(debug_) std::cout << "Submit search job to the job queue" << std::endl;
 
     // Wait for the search to be finished
     future.get();
-    std::cout << "Got the worker finished the search" << std::endl;
+    if constexpr(debug_) std::cout << "Got the worker finished the search" << std::endl;
     delete promise_ptr;
 }
 
@@ -124,7 +124,7 @@ void PartitionStore::partition_search_worker_fn() {
         int num_vectors = partition->get_num_vectors();
         int dimension = partition->get_code_size()/sizeof(float);
         size_t results_per_query = search_job.k;
-        std::cout << "Perform search on partition " << search_job.partition_id << " with " << num_vectors << " vectors with top k of " << results_per_query << " for " << num_queries << " queries" << std::endl;
+        if constexpr(debug_) std::cout << "Perform search on partition " << search_job.partition_id << " with " << num_vectors << " vectors with top k of " << results_per_query << " for " << num_queries << " queries" << std::endl;
         
         if(num_queries == 1) { 
             // Perform a normal search
@@ -136,15 +136,15 @@ void PartitionStore::partition_search_worker_fn() {
             scan_list(search_job.query_vector, partition_vecs, partition_ids, num_vectors, dimension, *query_buffer, search_job.metric_type);
 
             // Write out the output result
-            std::cout << "Single Query Results: ";
+            if constexpr(debug_) std::cout << "Single Query Results: ";
             std::vector<float> topk_distances = query_buffer->get_topk();
             std::vector<int64_t> topk_indicies = query_buffer->get_topk_indices();
             for(size_t i = 0; i < topk_distances.size(); i++) { 
                 search_job.result_distances[i] = topk_distances[i];
                 search_job.result_ids[i] = topk_indicies[i];
-                std::cout << i << "/" << results_per_query << " - (" << topk_indicies[i] << "," << topk_distances[i] << "); ";
+                if constexpr(debug_) std::cout << i << "/" << results_per_query << " - (" << topk_indicies[i] << "," << topk_distances[i] << "); ";
             }
-            std::cout << std::endl;
+            if constexpr(debug_) std::cout << std::endl;
 
             for(size_t i = topk_distances.size(); i < results_per_query; i++) { 
                 search_job.result_ids[i] = -1;
@@ -179,7 +179,7 @@ void PartitionStore::partition_search_worker_fn() {
         }
 
         // Mark that the job was completed
-        std::cout << "Marking that the worker completed the search " << std::endl;
+        if constexpr(debug_) std::cout << "Marking that the worker completed the search " << std::endl;
         search_job.promise->set_value();
     }
 }

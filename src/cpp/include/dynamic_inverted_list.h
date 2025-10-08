@@ -320,9 +320,11 @@ namespace faiss {
          * @brief Load the dynamic inverted lists from a file.
          *
          * @param path The file path.
+         * @param distributed_index_details Metadata related to distributing the partitions to different storage nodes
+         * 
          * @throws std::runtime_error on file I/O errors or invalid format.
          */
-        void load(const std::string &path);
+        void load(const std::string &path, shared_ptr<DistributedIndexDetails> distributed_index_details = nullptr);
 
         /**
          * @brief Retrieve a tensor of partition IDs.

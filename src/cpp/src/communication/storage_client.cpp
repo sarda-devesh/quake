@@ -19,7 +19,7 @@ StorageClient::StorageClient(std::string storage_address) {
     // Create a gRPC channel to the storage node
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(storage_address, grpc::InsecureChannelCredentials());
     stub_ = StorageNode::NewStub(channel);
-    std::cout << "Created storage client to node " << storage_address << std::endl;
+    if constexpr(debug_) std::cout << "Created storage client to node " << storage_address << std::endl;
 }
 
 bool StorageClient::add_partition(size_t partition_id, int64_t code_size) { 
@@ -34,7 +34,7 @@ bool StorageClient::add_partition(size_t partition_id, int64_t code_size) {
     Empty register_response;
     grpc::Status status = stub_->AddNewPartition(&context, register_request, &register_response);
     if(!status.ok()) { 
-        std::cout << "[StorageClient] AddNewPartition failed with error code " << status.error_code() << " and error details of " << status.error_message() << std::endl;
+        if constexpr(debug_) std::cout << "[StorageClient] AddNewPartition failed with error code " << status.error_code() << " and error details of " << status.error_message() << std::endl;
     }
 
     return status.ok();
@@ -62,7 +62,7 @@ bool StorageClient::add_vectors(size_t partition_id, size_t num_vectors, size_t 
     Empty add_response;
     grpc::Status status = stub_->AddVectors(&context, add_request, &add_response);
     if(!status.ok()) { 
-        std::cout << "[StorageClient] AddVectors failed with error code " << status.error_code() << " and error details of " << status.error_message() << std::endl;
+        if constexpr(debug_) std::cout << "[StorageClient] AddVectors failed with error code " << status.error_code() << " and error details of " << status.error_message() << std::endl;
     }
 
     return status.ok();
@@ -91,11 +91,11 @@ std::pair<std::vector<float>, std::vector<int64_t>> StorageClient::perform_searc
     query_vector_field->Add(query_vectors, query_vectors + total_vector_values);
 
     // Make the request
-    std::cout << "[Storage Client] Calling perform search for partition " << partition_id << std::endl;
+    if constexpr(debug_) std::cout << "[Storage Client] Calling perform search for partition " << partition_id << std::endl;
     PerformSearchResponse search_response;
     grpc::Status status = stub_->PerformSearch(&context, search_request, &search_response);
     assert(status.ok());
-    std::cout << "[Storage Client] Finished perform search for partition " << partition_id << " with okay status of " << status.ok() << std::endl;
+    if constexpr(debug_) std::cout << "[Storage Client] Finished perform search for partition " << partition_id << " with okay status of " << status.ok() << std::endl;
 
     // Create the result vectors from the response
     int num_expected_responses = num_queries * k;
@@ -103,23 +103,23 @@ std::pair<std::vector<float>, std::vector<int64_t>> StorageClient::perform_searc
     auto response_ids_field = search_response.vector_ids();
     assert(response_ids_field.size() == num_expected_responses);
 
-    std::cout << "[Storage Client] Expected Responses - " << num_expected_responses << ", IDs Field Size - " << response_ids_field.size() << std::endl;
+    if constexpr(debug_) std::cout << "[Storage Client] Expected Responses - " << num_expected_responses << ", IDs Field Size - " << response_ids_field.size() << std::endl;
     for(int i = 0; i < num_expected_responses; i++) { 
         result_ids.push_back(response_ids_field.Get(i));
-        std::cout << "[Storage Client] Result ID " << i << " has value of " << result_ids[result_ids.size() - 1] << std::endl;
+        if constexpr(debug_) std::cout << "[Storage Client] Result ID " << i << " has value of " << result_ids[result_ids.size() - 1] << std::endl;
     }
-    std::cout << "[Storage Client] Result IDs Size - " << result_ids.size() << std::endl;
+    if constexpr(debug_) std::cout << "[Storage Client] Result IDs Size - " << result_ids.size() << std::endl;
 
     std::vector<float> result_distances;
     auto response_distances_field = search_response.vector_distances();
     assert(response_distances_field.size() == num_expected_responses);
 
-    std::cout << "[Storage Client] Expected Responses - " << num_expected_responses << ", Dist Field Size - " << response_distances_field.size() << std::endl;
+    if constexpr(debug_) std::cout << "[Storage Client] Expected Responses - " << num_expected_responses << ", Dist Field Size - " << response_distances_field.size() << std::endl;
     for(int i = 0; i < num_expected_responses; i++) { 
         result_distances.push_back(response_distances_field.Get(i));
-        std::cout << "[Storage Client] Result Distance " << i << " has value of " << result_distances[result_distances.size() - 1] << std::endl;
+        if constexpr(debug_) std::cout << "[Storage Client] Result Distance " << i << " has value of " << result_distances[result_distances.size() - 1] << std::endl;
     }
-    std::cout << "[Storage Client] Result Distances Size - " << result_distances.size() << std::endl;
+    if constexpr(debug_) std::cout << "[Storage Client] Result Distances Size - " << result_distances.size() << std::endl;
 
     return std::make_pair(result_distances, result_ids);
 }

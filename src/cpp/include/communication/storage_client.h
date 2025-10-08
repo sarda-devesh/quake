@@ -77,6 +77,7 @@ public:
 
 private:
     std::unique_ptr<StorageNode::Stub> stub_; ///< gRPC stub for making calls to the storage node
+    static constexpr bool debug_ = false; ///< If true, print debug information.
 };
 
 /**

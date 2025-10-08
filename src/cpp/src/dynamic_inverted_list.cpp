@@ -441,7 +441,7 @@ namespace faiss {
         ofs.close();
     }
 
-    void DynamicInvertedLists::load(const string &filename) {
+    void DynamicInvertedLists::load(const string &filename, shared_ptr<DistributedIndexDetails> distributed_index_details) {
         /**
          * Deserialization Logic:
          *  - Read header (magic, version, nlist, code_size, num_partitions)
@@ -524,8 +524,20 @@ namespace faiss {
             ifs.read(reinterpret_cast<char*>(ids), isize);
 
             // IndexPartition part = IndexPartition(nv64, codes, ids, code_size);
-            shared_ptr<IndexPartition> part = std::make_shared<InMemoryIndexPartition>(nv64, codes, ids, code_size);
-            partitions_[pid] = part;
+            shared_ptr<IndexPartition> partition;
+            if(distributed_index_details == nullptr) { 
+                partition = std::make_shared<InMemoryIndexPartition>(nv64, codes, ids, code_size);
+            } else if(distributed_index_details->index_partition_type == IndexPartitionType::OnDiskArrow) { // Save the index on disk
+                partition = std::make_shared<OnDiskArrowIndexPartition>(pid, nv64, codes, ids, code_size);
+            } else { // Distribute the index to the specified remote node
+                std::shared_ptr<PartitionInitializeParams> initialize_parameters = std::make_shared<PartitionInitializeParams>(IndexPartitionType::Remote,
+                    distributed_index_details->index_id, distributed_index_details->partition_ids[i], distributed_index_details->partition_storage_nodes[i]
+                );
+                partition = std::make_shared<RemoteIndexPartition>(pid, code_size, initialize_parameters);
+                partition->append(nv64, ids, codes);
+            }
+             
+            partitions_[pid] = partition;
 
             // save to free codes and ids since IndexPartition makes its own copies
             delete[] codes;

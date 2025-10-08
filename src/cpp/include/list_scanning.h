@@ -93,7 +93,6 @@ public:
     }
 
     inline bool finished_all_jobs() {
-        int curr_jobs_left = jobs_left_.load(std::memory_order_relaxed);
         return jobs_left_.load(std::memory_order_relaxed) <= 0;
     }
 

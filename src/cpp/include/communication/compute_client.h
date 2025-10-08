@@ -13,6 +13,8 @@
 #include <string>
 #include <torch/torch.h>
 
+#include <common.h>
+
 #include "compute_node.grpc.pb.h" 
 
 using computenode::ComputeNode;
@@ -22,6 +24,7 @@ struct SearchIndexResult {
     std::string error_message; // If the query failed, the error message returned by the compute node
     torch::Tensor ids; // If the query successed, the resulting ids (torch::kInt64) for the search query. Shape: [num_queries, k]
     torch::Tensor distances; // If the query successed, the resulting distances (torch::kFloat32) for the search query. Shape: [num_queries, k]
+    int64_t total_query_time_ns; // Time taken for the search index to complete in ns (measured as end to end caller time) 
 
     SearchIndexResult() = default;
 };
@@ -38,20 +41,34 @@ public:
     /** 
     * @brief Constructor for ComputeClient
     * @param compute_address The address of the compute node we want to communicate with (e.g., "localhost:5051").
+    * @param query_timeout The timeout to use for cancelling queries in seconds. (Defaults to 30 seconds)
     */
-    ComputeClient(std::string compute_address);
+    ComputeClient(std::string compute_address, int query_timeout = 30);
 
     /**
-    * @brief Method to create a new index in this compute node
+    * @brief Method to create a new test index in this compute node
     * 
     * @param d The dimension of the vectors in the new index
     * @param num_vectors The number of vectors that should be created in the new index
     * @param num_partitions The number of partitions to initialize the new vector with
     * @param store_index_locally Whether the index leaf partitions should be stored locally or distributed out to storage nodes
+    * @param num_search_workers Number of search workers to use when scanning the index
     * 
     * @return The id associated with the newly created index 
     */
-   int create_new_index(int d, int num_vectors, int num_partitions, bool store_index_locally = false);
+   int create_new_index(int d, int num_vectors, int num_partitions, bool store_index_locally = false, int num_search_workers = NEW_INDEX_NUM_WORKERS);
+
+   /**
+    * @brief Method to load an existing index into this compute node
+    * 
+    * @param file_path The path to the index we want to load onto the index
+    * @param store_index_locally Whether the index leaf partitions should be stored locally or distributed out to storage nodes
+    * @param num_search_workers Number of search workers to use when scanning the index
+    * @param store_index_on_disk If the index is stored locally, then whether it should be stored locally or on disk
+    * 
+    * @return The id associated with newly created index
+    */
+   int load_existing_index(std::string file_path, bool store_index_locally = false, int num_search_workers = NEW_INDEX_NUM_WORKERS, bool store_index_on_disk = false); 
 
    /**
     * @brief Method to search an existing index in the compute node
@@ -66,7 +83,17 @@ public:
     */
    std::shared_ptr<SearchIndexResult> search_index(int index_id, torch::Tensor search_vectors, int k = 1, int nprobe = 1, float recall_target = -1.0);
 
+   /**
+    * @brief Method to send a heartbeat message to the compute node
+    * 
+    * @param value A boolean value to send to the compute node
+    * 
+    * @return An integer indicating the time taken for the 
+    */
+    int64_t heartbeat(bool val_to_send = false);
+
 private:
+    int query_timeout_; 
     std::unique_ptr<ComputeNode::Stub> stub_; ///< gRPC stub for making calls to the compute node
 };
 

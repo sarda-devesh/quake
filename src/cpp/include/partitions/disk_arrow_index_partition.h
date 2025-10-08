@@ -40,6 +40,8 @@ struct DiskArrowPartitionVersion {
  */
 class OnDiskArrowIndexPartition : public IndexPartition {
 public:
+    static constexpr bool debug_ = false; ///< If true, print debug information.
+    
     uint64_t ids_copy_capacity_; ///< The capacity, in bytes, of the buffer storing a copy of the codes
     size_t ids_copy_version_; ///< The version of the the ids we have copied
     idx_t* ids_copy_; ///< Pointer to a buffer used to store an in memory copy of a version of the ids

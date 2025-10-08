@@ -31,10 +31,10 @@ using coordinator::RegisterIndexReply;
 
 ABSL_FLAG(uint32_t, port, 5051, "Port to launch this service on");
 
-std::pair<std::string, std::string> MergeAddress(const std::string& host, uint16_t port) {
+std::string MergeAddress(const std::string& host, uint16_t port) {
   std::string host_without_port = host.substr(0, host.find_last_of(':'));
   std::string complete_address = absl::StrFormat("%s:%d", host_without_port, port);
-  return std::make_pair(host_without_port, complete_address);
+  return complete_address;
 }
 
 // Structs for storing various system state
@@ -85,7 +85,8 @@ public:
 
     // Save the compute worker in the state map
     std::lock_guard<std::mutex> lock(state_mutex_);
-    auto [compute_address, compute_endpoint] = MergeAddress(context->peer(), request->service_port());
+    std::string compute_address = context->peer();
+    std::string compute_endpoint = MergeAddress(compute_address, request->service_port());
 
     compute_workers_[compute_address] = std::make_shared<ComputeNode>(compute_endpoint);
     std::cout << "Registered compute node with address " << compute_address << " and endpoint " << compute_endpoint << std::endl;
@@ -98,7 +99,8 @@ public:
     
     // Save the address of the storage worker
     std::lock_guard<std::mutex> lock(state_mutex_);
-    auto [storage_address, storage_endpoint] = MergeAddress(context->peer(), request->service_port());
+    std::string storage_address = context->peer();
+    std::string storage_endpoint = MergeAddress(storage_address, request->service_port());
 
     storage_workers_[storage_address] = std::make_shared<StorageNode>(storage_endpoint);
     std::cout << "Registered storage node with address " << storage_address << " and endpoint " << storage_endpoint << std::endl;
@@ -107,11 +109,10 @@ public:
 
   Status RegisterNewIndex(ServerContext* context, const RegisterIndexRequest* request, RegisterIndexReply* response) { 
     std::lock_guard<std::mutex> lock(state_mutex_);
-    std::cout << "RegisterNewIndex called with " << compute_workers_.size() << " computes and " << storage_workers_.size() << " storage nodes" << std::endl;
+    std::string compute_address = context->peer();
+    std::cout << "RegisterNewIndex called by " << compute_address << " with " << storage_workers_.size() << " storage nodes" << std::endl;
 
     // Verify that this compute node is registered
-    std::string compute_address = context->peer();
-    compute_address = compute_address.substr(0, compute_address.find_last_of(':'));;
     if(compute_workers_.find(compute_address) == compute_workers_.end()) { 
       return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "Unregistered compute node trying to create a new index");
     }
@@ -137,7 +138,8 @@ public:
     auto* result_partition_ids_field = response->mutable_partition_ids();
     result_partition_ids_field->Clear(); result_partition_ids_field->Reserve(num_partitions);
 
-    for(int partition_id = 0; partition_id < num_partitions; partition_id++) { 
+    for(int i = 0; i < num_partitions; i++) { 
+      int partition_id = new_partition_id_counter_;
       std::shared_ptr<Partition> curr_partition = std::make_shared<Partition>(partition_id, index_id);
       index->partitions_[partition_id] = curr_partition;
       std::string partition_storage_key = storage_node_keys[partition_id % num_storage_nodes];
@@ -147,7 +149,8 @@ public:
       result_partition_field->Add(std::string(storage_node_endpoint));
       std::cout << "For partition " << new_partition_id_counter_ << " determined storage node of " << storage_node_endpoint << std::endl; 
 
-      result_partition_ids_field->Add(new_partition_id_counter_); new_partition_id_counter_++; 
+      result_partition_ids_field->Add(partition_id); 
+      new_partition_id_counter_++; 
     }
     std::cout << "Generated new index id of " << index_id << " for index with " << num_partitions << " partitions" << std::endl;
 
@@ -158,7 +161,7 @@ private:
   int new_index_id_counter_{0}; // Counter used to generate new index ids
   size_t new_partition_id_counter_{0}; // Counter used to generate globally unique partition ids
   std::unordered_map<std::string, std::shared_ptr<ComputeNode>> compute_workers_; // All the compute workers in the system
-  std::unordered_map<std::string, std::shared_ptr<StorageNode>> storage_workers_; // All the storage workers in the system
+  std::map<std::string, std::shared_ptr<StorageNode>> storage_workers_; // All the storage workers in the system (we use a normal map so that we iterate through the map keys in sorted order)
   std::mutex state_mutex_; // Mutex that needs to be acquired to update coordinator state
 };
 

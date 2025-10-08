@@ -15,7 +15,7 @@ RemoteIndexPartition::RemoteIndexPartition(size_t partition_id, int64_t code_siz
     global_partition_id_ = intialize_parameters_->global_partition_id_;
     storage_client_ = StorageClientStore::GetStorageClient(intialize_parameters_->storage_node_address_);
     bool result = storage_client_->add_partition(global_partition_id_, code_size);
-    std::cout << "[Remote Index] " << global_partition_id_ << ": Initializing partition " << partition_id << " with code size " << code_size << " returning result " << result << std::endl;
+    if constexpr(debug_) std::cout << "[Remote Index] " << global_partition_id_ << ": Initializing partition " << partition_id << " with code size " << code_size << " returning result " << result << std::endl;
     assert(result == true);
 }
 
@@ -48,7 +48,7 @@ void RemoteIndexPartition::set_partition_id(size_t partition_id) {
 void RemoteIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) { 
     bool result = storage_client_->add_vectors(global_partition_id_, n_entry, code_size_/sizeof(float), new_ids, reinterpret_cast<const float*>(new_codes));
     num_vectors_ += n_entry;
-    std::cout << "[Remote Index] " << global_partition_id_ <<  ": Add vectors called with n entry of " << n_entry << " updating num vectors to " << num_vectors_ << " returning result of " << result << std::endl;
+    if constexpr(debug_) std::cout << "[Remote Index] " << global_partition_id_ <<  ": Add vectors called with n entry of " << n_entry << " updating num vectors to " << num_vectors_ << " returning result of " << result << std::endl;
     assert(result == true);
 }
 

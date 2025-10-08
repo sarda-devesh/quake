@@ -10,6 +10,9 @@
 #include <quake_index.h>
 #include <geometry.h>
 #include <parallel.h>
+#include <mutex>
+
+std::mutex cout_mutex;
 
 // Constructor
 QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
@@ -53,8 +56,7 @@ void QueryCoordinator::initialize_workers(int num_cores) {
         return;
     }
 
-    std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_cores << " worker threads." <<
-            std::endl;
+    if constexpr (debug_) std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_cores << " worker threads." << std::endl;
 
     partition_manager_->distribute_partitions(num_cores);
 
@@ -110,8 +112,16 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         auto job_wait_start = std::chrono::high_resolution_clock::now();
         res.job_queue.wait_dequeue(job);
-        auto job_wait_end = std::chrono::high_resolution_clock::now();
+        auto job_wait_end = std::chrono::high_resolution_clock::now(); 
 
+        if constexpr(debug_) { 
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << "[Partition Scan Worker] Worker " << core_index << " got job for partition " << job.partition_id << std::endl;
+            }
+        }
+        
+        
         job_pull_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_wait_end - job_wait_start).count();
 
         auto job_process_start = std::chrono::high_resolution_clock::now();
@@ -137,7 +147,9 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         if(partition->get_index_type() == IndexPartitionType::Remote) { 
             std::shared_ptr<RemoteIndexPartition> remote_partition = std::dynamic_pointer_cast<RemoteIndexPartition>(partition); 
             assert(remote_partition != nullptr);
-            std::cout << "RemoteIndexPartition Scan Worker: Partition Id - " << job.partition_id << ", Num Vectors - " << remote_partition->get_num_vectors() << ", Is Batched - " << job.is_batched << std::endl;
+            if constexpr(debug_) { 
+                std::cout << "RemoteIndexPartition Scan Worker: Partition Id - " << job.partition_id << ", Num Vectors - " << remote_partition->get_num_vectors() << ", Is Batched - " << job.is_batched << std::endl;
+            }
 
             if (!job.is_batched) {
                 // Allocate a thread-local query buffer if needed.
@@ -151,11 +163,12 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 }
 
                 // Get the top k from the storage node
-                std::cout << "Calling get top k on remote partition with k = " << job.k << std::endl;
+                if constexpr(debug_) std::cout << "Calling get top k on remote partition with k = " << job.k << std::endl;
+                
                 auto [topk_distances, topk_ids] = remote_partition->get_top_k(
                     job.k, 1, reinterpret_cast<const float*>(res.local_query_buffer.data()), metric_
                 );
-                std::cout << "Get Top K returned vectors of size " << topk_distances.size() << " and " << topk_ids.size() << std::endl;
+                if constexpr(debug_) std::cout << "Get Top K returned vectors of size " << topk_distances.size() << " and " << topk_ids.size() << std::endl;
 
                 // Merge the result with the global buffer
                 std::shared_ptr<TopkBuffer> query_result_buffer = global_topk_buffer_pool_[job.query_ids[0]];
@@ -206,6 +219,13 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         const float *partition_codes = (const float*) partition->get_codes();
         const int64_t *partition_ids = (const int64_t*) partition->get_ids();
         int64_t partition_size = partition->get_num_vectors();
+        
+        if constexpr(debug_) { 
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << "[Partition Scan Worker] Worker " << core_index << ", In Mem Partition - " << job.partition_id << ", Partition Size - " << partition_size << ", Is Batched - " << job.is_batched << std::endl;
+            }
+        }
 
         // Branch for non-batched jobs.
         if (!job.is_batched) {
@@ -240,8 +260,16 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             int64_t n_results = topk_indices.size();
 
             // Merge local results into the global query buffer.
-            global_topk_buffer_pool_[job.query_ids[0]]->batch_add(topk.data(), topk_indices.data(), n_results);
+            std::shared_ptr<TopkBuffer> result_buffer = global_topk_buffer_pool_[job.query_ids[0]];
+            result_buffer->batch_add(topk.data(), topk_indices.data(), n_results);
             job_flags_[job.query_ids[0]][job.rank] = true;
+
+            if constexpr(debug_) {
+                {
+                    std::lock_guard<std::mutex> lock(cout_mutex);
+                    std::cout << "[Partition Scan Worker] Local Single Query Submit: Worker - " << core_index << ", Partition - " << job.partition_id << ", Query ID - " << job.query_ids[0] << ", Jobs Left - " << result_buffer->jobs_left_ << std::endl;
+                }
+            }
         }
         // Batched job branch.
         else {
@@ -303,6 +331,13 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 int64_t global_q = job.query_ids[q];
                 int n_results = topk_indices_list[q].size();
                 global_topk_buffer_pool_[global_q]->batch_add(topk_list[q].data(), topk_indices_list[q].data(), n_results);
+
+                if constexpr(debug_) {
+                    {
+                        std::lock_guard<std::mutex> lock(cout_mutex);
+                        std::cout << "[Partition Scan Worker] Multi Query Submit: Worker - " << core_index << ", Partition - " << job.partition_id << ", Query - " << q << ", Num Results - " << n_results << std::endl;
+                    }
+                }
             }
         }
         auto job_process_end = std::chrono::high_resolution_clock::now();
@@ -360,8 +395,9 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     {
         std::lock_guard<std::mutex> lock(global_mutex_);
         if (global_topk_buffer_pool_.size() < static_cast<size_t>(num_queries)) {
-            std::cout << "Resizing query_topk_buffers_ from " << global_topk_buffer_pool_.size()
-                      << " to " << num_queries << std::endl;
+            if constexpr(debug_) std::cout << "Resizing query_topk_buffers_ from " << global_topk_buffer_pool_.size() << " to " << num_queries << std::endl;
+            
+                      
             int old_size = global_topk_buffer_pool_.size();
             global_topk_buffer_pool_.resize(num_queries);
             for (int64_t q = old_size; q < num_queries; q++) {
@@ -383,6 +419,14 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         duration_cast<nanoseconds>(end_time - start_time).count();
 
     start_time = high_resolution_clock::now();
+
+    if constexpr(debug_) {
+        {
+            std::lock_guard<std::mutex> lock(cout_mutex);
+            std::cout << "[Worker Scan] Batched - " << search_params->batched_scan << ", Nprobe - " << search_params->nprobe << ", K - " << search_params->k << std::endl;
+        }
+    }
+    
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
@@ -413,7 +457,17 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         parallel_for(start, end, [&](int64_t q) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t pid = partition_ids_accessor[q][p];
-                if (pid == -1) continue;
+                if (pid == -1) { 
+                    if constexpr(debug_) {
+                        {
+                            std::lock_guard<std::mutex> lock(cout_mutex);
+                            std::cout << "[Worker Scan] Query " << q << " partition " << p << " got invalid pid of " << pid << std::endl;
+                        }
+                    }
+
+                    global_topk_buffer_pool_[q]->record_skipped_jobs(1);
+                    continue;
+                } 
 
                 ScanJob job;
                 job.is_batched = false;
@@ -423,11 +477,17 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.query_vector = x_ptr + q * dimension;
                 job.num_queries = 1;
                 job.rank = p;
-
+                
                 int core_id = partition_manager_->get_partition_core_id(pid);
-                assert(core_id != -1); 
 
-                std::cout << "[Simple Worker Scan] Submitting scan job for partition " << pid << " to core id " << core_id << std::endl;
+                if constexpr(debug_) {
+                    {
+                        std::lock_guard<std::mutex> lock(cout_mutex);
+                        std::cout << "[Worker Scan] Submitting single scan job for partition " << pid << " to core id " << core_id << std::endl;
+                    }
+                }
+
+                assert(core_id != -1); 
                 core_resources_[core_id].job_queue.enqueue(job);
             }
             }, search_params->num_threads);
@@ -458,7 +518,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         // check if all jobs have been processed
         bool all_done = true;
         for (int64_t q = 0; q < num_queries; q++) {
-            all_done = all_done && (global_topk_buffer_pool_[q]->jobs_left_ == 0);
+            all_done = all_done && (global_topk_buffer_pool_[q]->finished_all_jobs());
+            // std::cout << "[Worker Scan] Pending Check: Query - " << q << ", Jobs Left - " << global_topk_buffer_pool_[q]->jobs_left_ << std::endl;
         }
 
         if (all_done) {
@@ -518,6 +579,14 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         for (int64_t q = 0; q < num_queries; q++) {
             auto topk = global_topk_buffer_pool_[q]->get_topk();
             auto ids = global_topk_buffer_pool_[q]->get_topk_indices();
+
+            if constexpr(debug_) {
+                {
+                    std::lock_guard<std::mutex> lock(cout_mutex);
+                    std::cout << "[Worker Scan] Query " << q << " got topk of size " << topk.size() << " and ids of size " << ids.size() << std::endl;
+                }
+            }
+
             for (int i = 0; i < k; i++) {
                 if (i < (int) ids.size()) {
                     ids_accessor[q][i] = ids[i];
@@ -689,7 +758,10 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     }
 
     bool have_parent = (parent_ != nullptr);
-    std::cout << "Starting parent search for query coordinator with have parent of " << have_parent << std::endl;
+    if constexpr (debug_) { 
+        std::cout << "Starting search params: have parent - " << have_parent << ", Partition manager nlist - " << partition_manager_->nlist() << ", Start Nprobe - " << search_params->nprobe << ", Start K - " << search_params->k << std::endl;
+    }
+    
     x = x.contiguous();
 
     auto parent_timing_info = std::make_shared<SearchTimingInfo>();
@@ -699,7 +771,9 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     Tensor partition_ids_to_scan;
     if (parent_ == nullptr) {
         // scan all partitions for each query
-        partition_ids_to_scan = torch::arange(partition_manager_->nlist(), torch::kInt64);
+        int num_partitions = partition_manager_->nlist();
+        partition_ids_to_scan = torch::arange(num_partitions, torch::kInt64);
+        search_params->nprobe = num_partitions;
     } else {
         auto parent_search_params = make_shared<SearchParams>();
 
@@ -716,17 +790,18 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
         } else {
             parent_search_params->k = std::min(search_params->nprobe, (int) partition_manager_->nlist());
         }
-
+        
+        if constexpr (debug_) std::cout << "Calling parent search with params: Nprobe - " << parent_search_params->nprobe << ", K - " << parent_search_params->k << std::endl;
         auto parent_search_result = parent_->search(x, parent_search_params);
         partition_ids_to_scan = parent_search_result->ids;
         parent_timing_info = parent_search_result->timing_info;
+        if constexpr (debug_) std::cout << "Finished parent search" << std::endl;
     }
-    std::cout << "Finished parent search for query coordinator with have parent of " << have_parent << std::endl;
 
-    std::cout << "Calling scan partition for have parent of " << have_parent << std::endl;
+    if constexpr (debug_) std::cout << "Scan Partitions Params: Have Parent - " << have_parent << ", Nprobe - " << search_params->nprobe << ", K - " << search_params->k << std::endl;
     auto search_result = scan_partitions(x, partition_ids_to_scan, search_params);
     search_result->timing_info->parent_info = parent_timing_info;
-    std::cout << "Finished scan partition for have parent of " << have_parent << std::endl;
+    if constexpr (debug_) std::cout << "Finished scan partition for have parent of " << have_parent << std::endl;
 
     auto end = high_resolution_clock::now();
     search_result->timing_info->total_time_ns = duration_cast<nanoseconds>(end - start).
@@ -738,17 +813,14 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
 shared_ptr<SearchResult> QueryCoordinator::scan_partitions(Tensor x, Tensor partition_ids,
                                                            shared_ptr<SearchParams> search_params) {
     if (workers_initialized_) {
-        std::cout << "QueryCoordinator scan_partitions calling worker_scan" << std::endl;
-        if (debug_) std::cout << "[QueryCoordinator::scan_partitions] Using worker-based scan." << std::endl;
+        if constexpr (debug_) std::cout << "[QueryCoordinator::scan_partitions] Using worker-based scan." << std::endl;
         return worker_scan(x, partition_ids, search_params);
     } else {
         if (search_params->batched_scan) {
-            std::cout << "QueryCoordinator scan_partitions calling batched_serial_scan" << std::endl;
-            if (debug_) std::cout << "[QueryCoordinator::scan_partitions] Using batched serial scan." << std::endl;
+            if constexpr (debug_) std::cout << "[QueryCoordinator::scan_partitions] Using batched serial scan." << std::endl;
             return batched_serial_scan(x, partition_ids, search_params);
         } else {
-            std::cout << "QueryCoordinator scan_partitions calling serial_scan" << std::endl;
-            if (debug_) std::cout << "[QueryCoordinator::scan_partitions] Using serial scan." << std::endl;
+            if constexpr (debug_) std::cout << "[QueryCoordinator::scan_partitions] Using serial scan." << std::endl;
             return serial_scan(x, partition_ids, search_params);
         }
     }

@@ -10,15 +10,6 @@
 #include <common.h>
 
 /**
- * @brief An enum representing the different index partition types
- */
-enum IndexPartitionType {
-    InMemory, ///< In-memory index partition
-    OnDiskArrow, ///< On Disk in Arrow format
-    Remote, ///< Partition in a compute node whose state is stored in the storage node 
-};
-
-/**
  * @brief Parameters that govern how a DynamicInvertedLists should initialize a IndexPartition
  */
 struct PartitionInitializeParams { 
@@ -26,6 +17,8 @@ struct PartitionInitializeParams {
     int index_id_; 
     size_t global_partition_id_;
     std::string storage_node_address_;
+
+    PartitionInitializeParams(IndexPartitionType type) : partition_type_(type) {}
 
     PartitionInitializeParams(IndexPartitionType type, int index_id, size_t partition_id, std::string storage_address) : 
         partition_type_(type), index_id_(index_id), global_partition_id_(partition_id), storage_node_address_(storage_address) {}
@@ -40,6 +33,8 @@ struct PartitionInitializeParams {
  */
 class IndexPartition {
 public:
+    int worker_id_ = -1; ///< Mapped thread ID for processing
+
     /** 
      * @brief Returns the type of the current partition
      * 

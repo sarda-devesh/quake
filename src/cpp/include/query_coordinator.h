@@ -38,6 +38,8 @@ struct ScanJob {
  */
 class QueryCoordinator {
 public:
+    static constexpr bool debug_ = false; 
+
     // Public member variables (for internal use)
     shared_ptr<PartitionManager> partition_manager_; ///< Manager for partition assignments.
     shared_ptr<MaintenancePolicy> maintenance_policy_; ///< Policy for index maintenance.
@@ -64,8 +66,7 @@ public:
     vector<shared_ptr<TopkBuffer>> global_topk_buffer_pool_; ///< Global aggregator buffers.
     std::mutex global_mutex_;                          ///< Mutex for global synchronization.
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
-    std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.
-    bool debug_ = false;                               ///< Debug mode flag.
+    std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.                              ///< Debug mode flag.
 
     vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.

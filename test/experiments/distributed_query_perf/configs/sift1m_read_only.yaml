@@ -1,0 +1,76 @@
+seed: 1739
+mode: run
+name: vary_storage_nodes_sift1m_read_only
+overwrite: False
+
+dataset:
+  name: sift1m
+  path: /working_dir/quake_data
+
+base_index:
+  nc: 1024
+  metric: l2
+  num_build_workers: 64
+
+search_params:
+  k: 10
+  nprobe: 20
+
+workload:
+  insert_ratio: 0.0
+  delete_ratio: 0.0
+  query_ratio: 1.0
+  update_batch_size: 10000
+  query_batch_size: 100
+  number_of_operations: 100
+  initial_size: 1000000
+  cluster_size: 1000
+  cluster_sample_distribution: uniform
+
+configs:
+  - name: baseline_rpc_latency
+    load_index_locally: "True"
+    num_compute: 1
+    num_storage: 0
+    num_search_workers: 16
+
+  - name: leviathan_1_1_local
+    load_index_locally: "True"
+    num_compute: 1
+    num_storage: 0
+    num_search_workers: 16
+ 
+  - name: leviathan_1_1_local_on_disk
+    load_index_locally: "True"
+    store_index_on_disk: "True"
+    num_compute: 1
+    num_storage: 0
+    num_search_workers: 16
+
+  - name: leviathan_1_1
+    load_index_locally: "False"
+    num_compute: 1
+    num_storage: 1
+    num_search_workers: 16
+  
+  - name: leviathan_1_2
+    load_index_locally: "False"
+    num_compute: 1
+    num_storage: 2
+    num_search_workers: 16
+  
+  - name: leviathan_1_4
+    load_index_locally: "False"
+    num_compute: 1
+    num_storage: 4
+    num_search_workers: 16
+  
+  - name: leviathan_1_8
+    load_index_locally: "False"
+    num_compute: 1
+    num_storage: 8
+    num_search_workers: 16
+
+results_dir: /working_dir/quake_results
+workload_dir: /working_dir/quake_workloads
+quake_build_dir: /working_dir/quake/build

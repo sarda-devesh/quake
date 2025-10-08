@@ -49,9 +49,9 @@ public:
         
         try { 
             partition_store_->add_partition(request->partition_id(), request->code_size());
-            std::cout << "AddNewPartiton called for partition " << request->partition_id() << std::endl;
+            if constexpr(debug_) std::cout << "AddNewPartiton called for partition " << request->partition_id() << std::endl;
         } catch(...) { 
-            std::cout << "AddNewPartition caused an error" << std::endl;
+            if constexpr(debug_) std::cout << "AddNewPartition caused an error" << std::endl;
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Failed to add the the specified partition");
         }
         
@@ -59,7 +59,7 @@ public:
     }
 
     Status AddVectors(ServerContext* context, const AddVectorRequest* request, Empty* response) override { 
-        std::cout << "AddVectors called" << std::endl << std::flush;
+        if constexpr(debug_) std::cout << "AddVectors called" << std::endl << std::flush;
         try { 
             // First verify the input parameters
             size_t partition_id = request->partition_id();
@@ -67,26 +67,26 @@ public:
 
             auto vector_ids_field = request->vector_ids();
             if(vector_ids_field.size() != num_vectors) { 
-                std::cout << "Storage Node: Expected Num Vector Ids - " << num_vectors << ", Actual - " << vector_ids_field.size() << std::endl;
+                if constexpr(debug_) std::cout << "Storage Node: Expected Num Vector Ids - " << num_vectors << ", Actual - " << vector_ids_field.size() << std::endl;
                 throw std::runtime_error("Invalid number of vector ids");
             }
 
             const auto& vector_values_field = request->vector_values();
             int64_t expected_vector_values =  partition_store_->get_dimension(partition_id) * num_vectors;
             if(vector_values_field.size() != expected_vector_values) { 
-                std::cout << "Storage Node: Expected Num Vector Values - " << expected_vector_values << ", Actual - " << vector_values_field.size() << std::endl;
+                if constexpr(debug_) std::cout << "Storage Node: Expected Num Vector Values - " << expected_vector_values << ", Actual - " << vector_values_field.size() << std::endl;
                 throw std::runtime_error("Invalid number of vector values");
             }
 
             // Now add in the vectors into the partition store
-            std::cout << "Calling partition store add store with vector values with " << vector_values_field.size() << " floats for partition " << partition_id << std::endl;
+            if constexpr(debug_) std::cout << "Calling partition store add store with vector values with " << vector_values_field.size() << " floats for partition " << partition_id << std::endl;
             partition_store_->add_vectors(partition_id, num_vectors, vector_ids_field.data(), vector_values_field.data());
         } catch(...) { 
-            std::cout << "AddVectors returning INVALID_ARGUMENT" << std::endl;
+            if constexpr(debug_) std::cout << "AddVectors returning INVALID_ARGUMENT" << std::endl;
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Failed to add vectors to the specified partition");
         }
 
-        std::cout << "AddVectors returning OK" << std::endl << std::flush;
+        if constexpr(debug_) std::cout << "AddVectors returning OK" << std::endl << std::flush;
         return Status::OK;
     }
 
@@ -126,25 +126,28 @@ public:
             float* result_distances_ptr = reinterpret_cast<float*>(result_distances_field->mutable_data());
 
             // Now actually perform the search
-            std::cout << "[StorageNode] Calling perform search with args: K = " << k << ", Partition Id = " << partition_id << std::endl;
+            if constexpr(debug_) std::cout << "[StorageNode] Calling perform search with args: K = " << k << ", Partition Id = " << partition_id << std::endl;
             partition_store_->perform_search(partition_id, k, num_queries, query_vectors_ptr, metric, result_ids_ptr, result_distances_ptr);
 
-            std::cout << "[StorageNode] Returning result for search of - ";
-            for(size_t i = 0; i < k; i++) { 
-                std::cout << "(" << result_ids_field->Get(i) << "," << result_distances_field->Get(i) << "); ";
+            if constexpr(debug_) {
+                std::cout << "[StorageNode] Returning result for search of - ";
+                for(size_t i = 0; i < k; i++) { 
+                    std::cout << "(" << result_ids_field->Get(i) << "," << result_distances_field->Get(i) << "); ";
+                }
+                std::cout << std::endl;
             }
-            std::cout << std::endl;
         } catch(...) { 
-            std::cout << "Returning invalid argument for PerformSearch" << std::endl;
+            if constexpr(debug_) std::cout << "Returning invalid argument for PerformSearch" << std::endl;
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Failed to perform search");
         }
 
-        std::cout << "[StorageNode] Returning OK for PerformSearch with fields of size: " << response->vector_ids().size() << ", " << response->vector_distances().size() << std::endl;
+        if constexpr(debug_) std::cout << "[StorageNode] Returning OK for PerformSearch with fields of size: " << response->vector_ids().size() << ", " << response->vector_distances().size() << std::endl;
         return Status::OK;
     }
 
 private:
     std::shared_ptr<PartitionStore> partition_store_; // Data structure storing the partitions
+    static constexpr bool debug_ = false; ///< If true, print debug information.
 };
 
 int main(int argc, char** argv) {

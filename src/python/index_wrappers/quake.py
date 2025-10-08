@@ -1,7 +1,6 @@
 from typing import Optional, Tuple, Union
 
 import torch
-
 import quake
 from quake import QuakeIndex
 from quake.index_wrappers.wrapper import IndexWrapper

@@ -28,7 +28,7 @@ public:
     int current_level_ = 0; ///< Current level of the index.
     int index_id_ = -1; ///< The id associated with the index
 
-    bool debug_ = false; ///< If true, print debug information.
+    static constexpr bool debug_ = false; ///< If true, print debug information.
 
     /**
      * @brief Constructor for QuakeIndex.
@@ -121,8 +121,10 @@ public:
      * @brief Load the index from a file.
      * @param path Path to load the index.
      * @param n_workers Number of workers to use for query processing.
+     * @param distribute_leaf_partitions Whether we should distribute the leaf partitions of the loaded index to storage nodes
+     * @param store_index_on_disk If we are not distributing the index then whether we should store the index on disk or in memory
      */
-    void load(const std::string &path, int n_workers = 0);
+    void load(const std::string &path, int n_workers = 0, bool distribute_leaf_partitions = false, bool store_index_on_disk = false);
 
     /**
      * @brief Get the total number of vectors in the index.

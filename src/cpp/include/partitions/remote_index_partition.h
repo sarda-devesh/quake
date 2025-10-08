@@ -21,7 +21,6 @@
  */
 class RemoteIndexPartition : public IndexPartition {
 public:
-    int worker_id_; ///< Mapped thread ID for processing
     
     /// Default constructor
     RemoteIndexPartition() = default;
@@ -168,6 +167,7 @@ private:
     size_t partition_id_; // The local id associated with this partition
     size_t global_partition_id_; // The global id associated with this partition
     std::shared_ptr<PartitionInitializeParams> intialize_parameters_; // The parameters used to initialize this partition
+    static constexpr bool debug_ = false; ///< If true, print debug information.
 };
 
 

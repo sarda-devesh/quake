@@ -9,6 +9,7 @@
 
 #include "common.h"
 #include <quake_index.h>
+#include <communication/compute_client.h>
 #include <pybind11/stl.h>
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
@@ -366,6 +367,37 @@ PYBIND11_MODULE(_bindings, m) {
              oss << "}";
              return oss.str();
          });
+
+     /*********** ComputeClient Binding ***********/
+     class_<ComputeClient, shared_ptr<ComputeClient>>(m, "ComputeClient")
+         .def(py::init<std::string, int>(), arg("compute_address"), arg("query_timeout") = 30,
+             "Create a ComputeClient bound to a compute node at `compute_address`.")
+        .def("create_new_index", &ComputeClient::create_new_index,
+             arg("d"), arg("num_vectors"), arg("num_partitions"),
+             arg("store_index_locally") = false, arg("num_search_workers") = NEW_INDEX_NUM_WORKERS,
+             "Create a new test index on this compute node.")
+        .def("load_existing_index", &ComputeClient::load_existing_index,
+             arg("file_path"), arg("store_index_locally") = false, arg("num_search_workers") = NEW_INDEX_NUM_WORKERS,
+              arg("store_index_on_disk") = false, "Load an existing index into this compute node.")
+        .def("search_index", &ComputeClient::search_index,
+             arg("index_id"), arg("search_vectors"),
+             arg("k") = 1, arg("nprobe") = 1, arg("recall_target") = -1.0,
+             "Search an index on this compute node. Returns SearchIndexResult.")
+        .def("heartbeat", &ComputeClient::heartbeat, arg("val_to_send") = false, "Sends an heartbeat to the compute node and returns the time taken");
+
+     /*********** SearchIndexResult Binding ***********/
+     class_<SearchIndexResult, shared_ptr<SearchIndexResult>>(m, "SearchIndexResult")
+        .def(py::init<>())
+        .def_readwrite("query_successful", &SearchIndexResult::query_sucessful,
+                       "Whether the query was successful.")
+        .def_readwrite("total_query_time_ns", &SearchIndexResult::total_query_time_ns,
+                       "The total time it took to get the query result on the client in ns")  
+        .def_readwrite("error_message", &SearchIndexResult::error_message,
+                       "Error message if the query failed.")
+        .def_readwrite("ids", &SearchIndexResult::ids,
+                       "Resulting IDs (torch.int64).")
+        .def_readwrite("distances", &SearchIndexResult::distances,
+                       "Resulting distances (torch.float32).");    
 }
 
 #endif //QUAKE_WRAP_H

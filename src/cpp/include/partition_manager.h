@@ -23,11 +23,12 @@ class QuakeIndex;
  */
 class PartitionManager {
 public:
+    static constexpr bool debug_ = false; ///< If true, print debug information.
+
     shared_ptr<QuakeIndex> parent_ = nullptr; ///< Pointer to a higher-level parent index.
     std::shared_ptr<faiss::DynamicInvertedLists> partition_store_ = nullptr; ///< Pointer to the inverted lists.
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
-    bool debug_ = false; ///< If true, print debug information.
     bool check_uniques_ = false; ///< If true, check that vector IDs are unique and don't already exist in the index.
 
     std::set<int64_t> resident_ids_; ///< Set of partition IDs.
@@ -113,8 +114,9 @@ public:
     /**
      * @brief Distribute the partitions across multiple workers.
      * @param num_workers The number of workers to distribute the partitions across.
+     * @param recluster_no_parent Whether we should recluster the partitions if current level doesn't have any parent
      */
-    void distribute_partitions(int num_workers);
+    void distribute_partitions(int num_workers, bool recluster_no_parent = false);
 
     /**
      * @brief Set the core ID for a given partition.
@@ -185,8 +187,9 @@ public:
     /**
      * @brief Load the partition manager from a file.
      * @param path Path to load the partition manager.
+     * @param distributed_index_details Metadata related to distributing the partitions to different storage nodes
      */
-    void load(const string &path);
+    void load(const string &path, shared_ptr<DistributedIndexDetails> distributed_index_details = nullptr);
 };
 
 

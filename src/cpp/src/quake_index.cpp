@@ -8,6 +8,8 @@
 #include <clustering.h>
 #include <fstream>
 
+#include <communication/coordinator_client.h>
+
 QuakeIndex::QuakeIndex(int index_id, int current_level) {
     // Initialize the QuakeIndex
     parent_ = nullptr;
@@ -114,7 +116,7 @@ Tensor QuakeIndex::get(Tensor ids) {
         throw std::runtime_error("[QuakeIndex::get()] No partition manager. Index not built?");
     }
 
-    if (debug_) {
+    if constexpr (debug_) {
         std::cout << "[QuakeIndex::get] Getting vectors for IDs: " << ids.sizes() << std::endl;
     }
 
@@ -204,18 +206,19 @@ void QuakeIndex::save(const std::string& dir_path) {
         parent_->save(parent_dir);
     }
 
-    std::cout << "[QuakeIndex::save] Index saved to directory: " << dir_path << "\n";
+    if constexpr(debug_) std::cout << "[QuakeIndex::save] Index saved to directory: " << dir_path << "\n";
 }
 
-void QuakeIndex::load(const std::string& dir_path, int n_workers) {
+void QuakeIndex::load(const std::string& dir_path, int n_workers, bool distribute_leaf_partitions, bool store_index_on_disk) {
     namespace fs = std::filesystem;
 
     if (!fs::exists(dir_path) || !fs::is_directory(dir_path)) {
         throw std::runtime_error("Cannot load QuakeIndex, directory does not exist: " + dir_path);
     }
 
-    std::cout << "[QuakeIndex::load] Loading index from directory: " << dir_path << "\n";
+    if constexpr(debug_) std::cout << "[QuakeIndex::load] Loading index from directory: " << dir_path << "\n";
 
+    int num_partitions = -1;
     // 1. Read metadata.txt
     {
         std::string meta_file = (fs::path(dir_path) / "metadata.txt").string();
@@ -235,23 +238,41 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers) {
                 metric_ = static_cast<MetricType>(m);
             } else if (key == "level") {
                 current_level_ = std::stoi(val);
+            } else if(key == "nlist") { 
+                num_partitions = std::stoi(val);
             }
         }
         ifs.close();
+
+        if(num_partitions == -1) { 
+            throw std::runtime_error("Failed to find nlist in metadata file " + meta_file);
+        }
     }
+
+    // Request details for the new index from the coordinator if we want to store this remotely
+    std::shared_ptr<DistributedIndexDetails> distributed_index_details = nullptr; 
+    if(distribute_leaf_partitions) { 
+        std::shared_ptr<CoordinatorClient> coordinator_client = CoordinatorClient::GetCoordinatorClient();
+        distributed_index_details = coordinator_client->register_new_index(num_partitions);
+        index_id_ = distributed_index_details->index_id;
+    } else if(store_index_on_disk) { 
+        distributed_index_details = std::make_shared<DistributedIndexDetails>();
+        distributed_index_details->index_partition_type = IndexPartitionType::OnDiskArrow;
+    } 
 
     // 2. Create partition manager and load it
     {
         partition_manager_ = std::make_shared<PartitionManager>();
         std::string partitions_path = (fs::path(dir_path) / "partitions").string();
-        partition_manager_->load(partitions_path);
+        partition_manager_->load(partitions_path, distributed_index_details);
+        if constexpr(debug_) std::cout << "Loaded partition manager with " << partition_manager_->nlist() << " partitions with metadata having " << num_partitions << " partitions" << std::endl;
     }
 
     // 3. Check if parent exists and load it
     {
         std::string parent_dir = (fs::path(dir_path) / "parent").string();
         if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
-            parent_ = std::make_shared<QuakeIndex>();
+            parent_ = std::make_shared<QuakeIndex>(index_id_);
             parent_->load(parent_dir, n_workers);
             partition_manager_->parent_ = parent_;
         } else {
@@ -259,13 +280,14 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers) {
         }
     }
     // 4. Setup maintenance policy
+    if constexpr(debug_) std::cout << "Initializing mainteance policy " << std::endl;
     auto default_params = make_shared<MaintenancePolicyParams>();
     initialize_maintenance_policy(default_params);
 
     // 5. Create query coordinator
-    std::cout << "Loading coordinator with n_workers=" << n_workers << '\n';
+    if constexpr(debug_) std::cout << "Loading coordinator with n_workers=" << n_workers << '\n';
     query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, n_workers);
-    std::cout << "Loaded coordinator\n";
+    if constexpr(debug_) std::cout << "Loaded coordinator\n";
 }
 
 int64_t QuakeIndex::ntotal() {

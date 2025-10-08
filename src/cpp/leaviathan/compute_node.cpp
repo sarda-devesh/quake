@@ -12,6 +12,7 @@
 #include <atomic>
 #include <unordered_map>
 #include <cassert>
+#include <filesystem>
 
 #include <communication/coordinator_client.h>
 #include <quake_index.h>
@@ -24,14 +25,35 @@ using google::protobuf::Empty;
 
 using computenode::ComputeNode;
 using computenode::NewIndexRequest;
+using computenode::ExistingIndexRequest;
 using computenode::IndexCreationReply;
 using computenode::SearchIndexRequest;
 using computenode::SearchIndexReply;
+using computenode::HeartbeatRequest;
+using computenode::HeartbeatReply;
 
 ABSL_FLAG(uint32_t, port, 9001, "Port to launch this service on");
 ABSL_FLAG(std::string, coordinator_address, "localhost:5051", "Address of the coordinator service");
 
-constexpr int NEW_INDEX_NUM_WORKERS = 4;
+// Helper method to decode the file path from the uri
+std::string uri_decode(std::string encoded) {
+    std::string file_uri_prefix = "file://";
+    encoded = encoded.substr(file_uri_prefix.length());
+
+    std::ostringstream oss;
+    for (size_t i = 0; i < encoded.size(); ++i) {
+        if (encoded[i] == '%' && i + 2 < encoded.size() &&
+            std::isxdigit(encoded[i+1]) && std::isxdigit(encoded[i+2])) {
+            // decode %XX hex
+            std::string hex = encoded.substr(i+1, 2);
+            oss << static_cast<char>(std::stoi(hex, nullptr, 16));
+            i += 2;
+        } else {
+            oss << encoded[i];
+        }
+    }
+    return oss.str();
+}
 
 class ComputeNodeServiceImpl final : public ComputeNode::Service {
 public:
@@ -42,13 +64,12 @@ public:
         // Determine the index details based on whether it is going to be stored in memory or remotely
         int num_clusters = request->num_clusters();
         std::shared_ptr<DistributedIndexDetails> new_index_details = nullptr; 
-        int new_index_id = -1 * indexes_.size(); // -1 so that it doesn't conflict with an global index id
+        int new_index_id = -1 * (indexes_.size() + 1); // -1 so that it doesn't conflict with an global index id
         if(!request->store_index_locally()) { 
             std::shared_ptr<CoordinatorClient> coordinator_client = CoordinatorClient::GetCoordinatorClient();
             new_index_details = coordinator_client->register_new_index(num_clusters);
             new_index_id = new_index_details->index_id;
         }
-        std::cout << "With store_index_locally=" << request->store_index_locally() << " determined new index id of " << new_index_id << std::endl;
 
         // Create the new index
         std::shared_ptr<QuakeIndex> new_index = std::make_shared<QuakeIndex>(new_index_id);
@@ -61,7 +82,7 @@ public:
         build_params->dimension = vector_dimension;
         build_params->nlist = num_clusters;
         build_params->distributed_index_details = new_index_details;
-        build_params->num_workers = NEW_INDEX_NUM_WORKERS;
+        build_params->num_workers = request->num_search_workers();
         
         torch::Tensor build_vectors_ = torch::randn({num_vectors, vector_dimension}, torch::kFloat32);
         torch::Tensor build_ids_ = torch::arange(0, num_vectors, torch::kInt64);
@@ -74,13 +95,36 @@ public:
         return Status::OK;
     }
 
+    Status LoadExistingIndex(ServerContext* context,
+                        const ExistingIndexRequest* request,
+                        IndexCreationReply* response) { 
+        
+        // Extract the index path from the uri
+        std::string index_dir_str = uri_decode(request->index_uri());
+        std::shared_ptr<QuakeIndex> new_index = nullptr; 
+        
+        // Load the index
+        int default_index_id = -1 * (indexes_.size() + 1); // This will get overriden by the global index id if we decide to distribute the index
+        new_index = std::make_shared<QuakeIndex>(default_index_id); 
+        new_index->load(index_dir_str, request->num_search_workers(), !request->store_index_locally(), request->store_index_on_disk());
+
+        // Save the new index
+        int new_index_id = new_index->index_id_;
+        response->set_index_id(new_index_id);
+        indexes_[new_index_id] = new_index; 
+        if constexpr(debug_) std::cout << "Loaded index from path " << index_dir_str << " with index id of " << new_index_id << std::endl;
+
+        return Status::OK;
+    }
+
     Status SearchIndex(ServerContext* context,
                         const SearchIndexRequest* request,
                         SearchIndexReply* response) override {
         
         // Verify the query parameters
         int index_id = request->index_id();
-        if(indexes_.find(index_id) == indexes_.end()) { 
+        if(indexes_.find(index_id) == indexes_.end()) {
+            std::cout << "SearchIndex called for invalid index id of " << index_id << std::endl; 
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid Index Id");
         }
 
@@ -102,9 +146,13 @@ public:
 
         // Actually perform the search and save the result in the response
         try { 
-            std::cout << "[Compute Node] Performing search with details: Index - " << index_id << ", Num Queries - " << num_queries << ", K - " << search_params->k << ", NProbe - " << search_params->nprobe << ", Recall Target - " << search_params->recall_target << std::endl;
+            if constexpr(debug_) { 
+                std::cout << "[Compute Node] Performing search with details: Index - " << index_id << ", Num Queries - " << num_queries << ", K - " << search_params->k << ", NProbe - " << search_params->nprobe << ", Recall Target - " << search_params->recall_target << std::endl;
+            }
             std::shared_ptr<SearchResult> search_result = search_index_->search(vectors, search_params);
-            std::cout << "Finished search in " << search_result->timing_info->total_time_ns << " ns" << std::endl;
+            if constexpr(debug_) {
+                std::cout << "Finished search in " << search_result->timing_info->total_time_ns << " ns" << std::endl;
+            }
 
             int num_responses = num_queries * request->top_k();
             torch::Tensor response_ids = torch::flatten(search_result->ids).to(torch::kInt64);
@@ -121,13 +169,23 @@ public:
         } catch (const std::exception& e) {
             // Catch any other standard exception type
             std::cerr << "Vector Search got exception of " << e.what() << std::endl;
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Searching the Index resulted in an error");
         }
         
 
         return Status::OK;
     }
 
+    Status Heartbeat(ServerContext* context,
+                        const HeartbeatRequest* request,
+                        HeartbeatReply* response) override { 
+        
+        response->set_reply_value(request->value_to_return());
+        return Status::OK;
+    }
+
 private:
+    static constexpr bool debug_ = false; 
     std::unordered_map<int, std::shared_ptr<QuakeIndex>> indexes_; // Map storing all the indexes in this compute node
 };
 

@@ -11,6 +11,9 @@ service ComputeNode {
 
     // Perform search over an existing index
     rpc SearchIndex (SearchIndexRequest) returns (SearchIndexReply) { }
+
+    // Heartbeat endpoint that can be used to check if the server is alive
+    rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply) { }
 }
 
 // Messages used to create new/load existing index
@@ -19,11 +22,14 @@ message NewIndexRequest {
     int32 num_vectors = 2;
     int32 num_clusters = 3; 
     bool store_index_locally = 4;
+    int32 num_search_workers = 5;
 }
 
 message ExistingIndexRequest { 
     string index_uri = 1; 
     bool store_index_locally = 2;
+    bool store_index_on_disk = 3;
+    int32 num_search_workers = 4;
 }
 
 message IndexCreationReply { 
@@ -42,4 +48,13 @@ message SearchIndexRequest {
 message SearchIndexReply { 
     repeated float result_distances = 1;
     repeated int64 result_ids = 2;
+}
+
+// Heartbeat Data
+message HeartbeatRequest { 
+    bool value_to_return = 1;
+}
+
+message HeartbeatReply { 
+    bool reply_value = 1;
 }

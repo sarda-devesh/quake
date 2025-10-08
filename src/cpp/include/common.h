@@ -96,7 +96,10 @@ constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 10.0f;    ///< Default threshold in
 
 const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_N = {1, 2, 4, 16, 64, 256, 1024, 4096, 16384, 65536};   ///< Default range of n values for latency estimator.
 const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_K = {1, 4, 16, 64, 256};                                ///< Default range of k values for latency estimator.
-constexpr int DEFAULT_LATENCY_ESTIMATOR_NTRIALS = 5;                                                          ///< Default number of trials for latency estimator.
+constexpr int DEFAULT_LATENCY_ESTIMATOR_NTRIALS = 5;                                                      ///< Default number of trials for latency estimator.
+
+// Constants for Leviathan Components
+constexpr int NEW_INDEX_NUM_WORKERS = 4;
 
 // macros
 #define DEBUG_PRINT(x) std::cout << #x << " = " << x << std::endl;
@@ -117,7 +120,17 @@ struct MaintenancePolicyParams {
     MaintenancePolicyParams() = default;
 };
 
+/**
+ * @brief An enum representing the different index partition types
+ */
+enum IndexPartitionType {
+    InMemory, ///< In-memory index partition
+    OnDiskArrow, ///< On Disk in Arrow format
+    Remote, ///< Partition in a compute node whose state is stored in the storage node 
+};
+
 struct DistributedIndexDetails { 
+    IndexPartitionType index_partition_type = IndexPartitionType::Remote;
     int index_id; // The global id associated with the new index
     std::vector<size_t> partition_ids; // The globabl id for each of the index's partitions
     std::vector<std::string> partition_storage_nodes; // The storage nodes associated with the new index

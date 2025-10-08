@@ -93,7 +93,7 @@ add_compile_options(-march=native)
 
 # Switch ABI mode
 if(QUAKE_SET_ABI_MODE)
-    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
 endif()
 
 
@@ -261,12 +261,14 @@ find_library(TORCH_PYTHON_LIBRARY torch_python PATHS "${TORCH_INSTALL_PREFIX}/li
 file(GLOB_RECURSE BINDINGS ${project_BINDINGS_DIR}/*.cpp)
 pybind11_add_module(_bindings ${BINDINGS})
 set_target_properties(_bindings PROPERTIES LINKER_LANGUAGE CXX)
-target_link_libraries(_bindings PRIVATE ${PROJECT_NAME} ${TORCH_PYTHON_LIBRARY})
+target_link_libraries(_bindings PRIVATE ${PROJECT_NAME} ${TORCH_PYTHON_LIBRARY} ${LINK_LIBS})
+target_include_directories(_bindings PRIVATE ${TORCH_INCLUDE_DIRS} ${project_INCLUDE_DIR} faiss)
+add_dependencies(_bindings my_proto_lib)
 add_custom_target(bindings)
 add_dependencies(bindings _bindings)
 
 # ---------------------------------------------------------------
-# Leviathan
+# Leviathan Executables
 # ---------------------------------------------------------------
 file(GLOB LEVIATHAN_SRCS "src/cpp/leaviathan/*.cpp")
 

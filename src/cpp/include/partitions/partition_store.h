@@ -138,4 +138,5 @@ private:
     std::vector<std::thread> worker_threads_;  ///< Container for worker threads.
     moodycamel::BlockingConcurrentQueue<PartitionSearchJob> job_queue_; // Queue of the current scan jobs
     std::unordered_map<size_t, std::shared_ptr<IndexPartition>> partitions_; // A map storing all of the partitions
+    static constexpr bool debug_ = false; ///< If true, print debug information.
 };

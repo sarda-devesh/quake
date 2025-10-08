@@ -132,12 +132,11 @@ void OnDiskArrowIndexPartition::append(int64_t n_entry, const idx_t* new_ids, co
     if(n_entry == 0) {
         return;
     }
-
-    std::cout << "Append called with num entry of " << n_entry << " with code size of " << code_size_ << std::endl;
+    if constexpr(debug_) std::cout << "Append called with num entry of " << n_entry << " with code size of " << code_size_ << std::endl;
 
     // Deal with the case that we don't have any existing partition
     if(partition_versions_.empty()) { 
-        std::cout << "OnDiskArrowIndexPartition: Append called with no existing partition so just making it the new partition " << std::endl;
+        if constexpr(debug_) std::cout << "OnDiskArrowIndexPartition: Append called with no existing partition so just making it the new partition " << std::endl;
         add_new_partition_version(new_codes, new_ids, n_entry);
         return;
     }
@@ -263,9 +262,9 @@ void OnDiskArrowIndexPartition::add_new_partition_version(const uint8_t* codes, 
 
     // Now persist the data for this version to disk
     if(num_vectors > 0) { 
-        std::cout << "add_new_partition_version writing " << num_vectors << " vectors with code size of " << code_size_ << " to path " << vector_save_path << std::endl;
+        if constexpr(debug_) std::cout << "add_new_partition_version writing " << num_vectors << " vectors with code size of " << code_size_ << " to path " << vector_save_path << std::endl;
         write_buffer_to_disk(codes, num_vectors * code_size_, vector_save_path); 
-        std::cout << "add_new_partition_version writing " << num_vectors << " ids to path " << ids_save_path << std::endl;
+        if constexpr(debug_) std::cout << "add_new_partition_version writing " << num_vectors << " ids to path " << ids_save_path << std::endl;
         write_buffer_to_disk(reinterpret_cast<const uint8_t*>(ids), num_vectors * sizeof(idx_t), ids_save_path); 
     } else { 
         std::ofstream code_file(vector_save_path);
@@ -280,7 +279,7 @@ void OnDiskArrowIndexPartition::add_new_partition_version(const uint8_t* codes, 
         common_save_path 
     };
     partition_versions_.push_back(new_parition_version);
-    std::cout << "Updated num partitions to " << num_vectors << std::endl;
+    if constexpr(debug_) std::cout << "Updated num partitions to " << num_vectors << std::endl;
 }
 
 void OnDiskArrowIndexPartition::write_buffer_to_disk(const uint8_t* buffer, int64_t buffer_size, std::filesystem::path save_path) { 
