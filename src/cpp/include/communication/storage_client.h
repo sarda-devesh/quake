@@ -23,6 +23,18 @@
 using storagenode::StorageNode;
 
 /**
+ * @brief Struct storing the result of a TopK Query
+ */
+struct TopKRPCResult { 
+    std::vector<float> distances; // The resulting distances
+    std::vector<int64_t> ids; // The resulting ids
+
+    int64_t request_create_time_ns; // The time it took to create the request
+    int64_t rpc_time_ns; // The time taken by the actual rpc call
+    int64_t response_parse_time_ns; // The time taken to parse the response
+};
+
+/**
  * @brief Wrapper to interact with a storage node via gRPC.
  *
  * The StorageClient is a client-side wrapper that facilitates communication
@@ -42,13 +54,14 @@ public:
      * 
      * @param partition_id The id of the partition to add
      * @param code_size code size of the vectors in this partition
+     * @param store_partition_on_disk Whether we should store the partition on disk or in memory
      * 
      * @return Whether we were able to sucessfully add the partition or not
      */
-    bool add_partition(size_t partition_id, int64_t code_size);
+    bool add_partition(size_t partition_id, int64_t code_size, bool store_partition_on_disk = true);
 
     /**
-     * @brief Method to add a new partititon to the storage node
+     * @brief Method to add vectors to an existing partition in the storage node
      *  
      * @param partition_id The id of the partition to add
      * @param num_vectors The number of vectors to add
@@ -70,10 +83,17 @@ public:
      * @param query_vectors A pointer to the query vector data
      * @param MetricType The distance metric to use 
      * 
-     * @return The ids of the nearest neighbors and their distances for the search vector
+     * @return TopKRPCResult A pointer to the query result (see struct for more details)
     */
-    std::pair<std::vector<float>, std::vector<int64_t>> perform_search(size_t partition_id, size_t k, int num_queries, size_t vector_dimension, 
+    std::shared_ptr<TopKRPCResult> perform_search(size_t partition_id, size_t k, int num_queries, size_t vector_dimension, 
         const float* query_vectors, MetricType metric);
+
+    /**
+     * @brief Method to print the storage node metrics
+     * 
+     * This method print any system level metrics collected by the storage node to stdout associated with the compute node process.
+     */
+    void print_metrics();
 
 private:
     std::unique_ptr<StorageNode::Stub> stub_; ///< gRPC stub for making calls to the storage node
@@ -97,7 +117,6 @@ public:
         return storage_clients_[storage_node];
     }
 
-private:
     inline static std::unordered_map<std::string, std::shared_ptr<StorageClient>> storage_clients_;
     inline static std::mutex map_mutex_; // Mutex that needs to be acquired to update the map
 };

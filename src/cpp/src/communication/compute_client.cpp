@@ -18,6 +18,7 @@ using computenode::SearchIndexRequest;
 using computenode::SearchIndexReply;
 using computenode::HeartbeatRequest;
 using computenode::HeartbeatReply;
+using google::protobuf::Empty;
 
 ComputeClient::ComputeClient(std::string compute_address, int query_timeout) : query_timeout_(query_timeout) {
     // Create a gRPC channel to the compute node
@@ -135,4 +136,11 @@ int64_t ComputeClient::heartbeat(bool val_to_send) {
 
     assert(status.ok());
     return std::chrono::duration_cast<std::chrono::nanoseconds>(rpc_end_time - rpc_start_time).count();
+}
+
+void ComputeClient::print_metrics() { 
+    grpc::ClientContext context;
+    Empty request;
+    Empty response;
+    stub_->PrintAndResetMetrics(&context, request, &response);
 }

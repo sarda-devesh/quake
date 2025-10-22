@@ -14,7 +14,7 @@ RemoteIndexPartition::RemoteIndexPartition(size_t partition_id, int64_t code_siz
     // Get the client that can be used to communicate with the storage node
     global_partition_id_ = intialize_parameters_->global_partition_id_;
     storage_client_ = StorageClientStore::GetStorageClient(intialize_parameters_->storage_node_address_);
-    bool result = storage_client_->add_partition(global_partition_id_, code_size);
+    bool result = storage_client_->add_partition(global_partition_id_, code_size, intialize_parameters_->store_remote_index_on_disk_);
     if constexpr(debug_) std::cout << "[Remote Index] " << global_partition_id_ << ": Initializing partition " << partition_id << " with code size " << code_size << " returning result " << result << std::endl;
     assert(result == true);
 }
@@ -72,7 +72,7 @@ int64_t RemoteIndexPartition::find_id(idx_t id) {
     throw std::runtime_error("Find id Function not implemented");
 }
 
-std::pair<std::vector<float>, std::vector<int64_t>> RemoteIndexPartition::get_top_k(size_t k, 
+std::shared_ptr<TopKRPCResult> RemoteIndexPartition::get_top_k(size_t k, 
     int num_queries, const float* query_vectors, MetricType metric) { 
     
    // Make the call to the storage node

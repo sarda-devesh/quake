@@ -56,6 +56,7 @@ public:
      vector<shared_ptr<TopkBuffer>> topk_buffer_pool; ///< Preallocated Top‑K buffers.
      vector<std::byte> local_query_buffer;            ///< Local aggregator for query results.
      moodycamel::BlockingConcurrentQueue<ScanJob> job_queue; ///< Job queue for scan jobs.
+     std::unordered_map<std::string, std::shared_ptr<MetricStore>> metrics; ///< Map storing core specific metrics
     };
 
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
@@ -71,7 +72,6 @@ public:
     vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
     std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
-
 
     /**
     * @brief Constructs a QueryCoordinator.
@@ -191,6 +191,8 @@ private:
      * @param d Dimensionality of the query vectors.
      */
     void allocate_core_resources(int core_idx, int num_queries, int k, int d);
-    };
+
+    void record_worker_metrics(CoreResources& res, std::string metric_name, float metric_value);
+};
 
 #endif //QUERY_COORDINATOR_H

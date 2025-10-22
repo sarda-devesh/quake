@@ -92,6 +92,15 @@ public:
     */
     int64_t heartbeat(bool val_to_send = false);
 
+    /**
+     * @brief Method to print the compute node metrics
+     * 
+     * This method print any system level metrics collected by the compute node to stdout associated with the compute node process.
+     * It also informs all storage node it is aware of to dump thier system level metrics
+     * 
+     */
+    void print_metrics();
+
 private:
     int query_timeout_; 
     std::unique_ptr<ComputeNode::Stub> stub_; ///< gRPC stub for making calls to the compute node

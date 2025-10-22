@@ -158,7 +158,7 @@ public:
      * @param query_vectors A pointer to the query vector data
      * @param MetricType The distance metric to use 
     */
-    std::pair<std::vector<float>, std::vector<int64_t>> get_top_k(size_t k, int num_queries, const float* query_vectors, MetricType metric);
+    std::shared_ptr<TopKRPCResult> get_top_k(size_t k, int num_queries, const float* query_vectors, MetricType metric);
 
 private:
     std::shared_ptr<StorageClient> storage_client_; // The client that can be used to communicate with the storage node

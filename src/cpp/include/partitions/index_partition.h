@@ -17,11 +17,12 @@ struct PartitionInitializeParams {
     int index_id_; 
     size_t global_partition_id_;
     std::string storage_node_address_;
+    bool store_remote_index_on_disk_;
 
     PartitionInitializeParams(IndexPartitionType type) : partition_type_(type) {}
 
-    PartitionInitializeParams(IndexPartitionType type, int index_id, size_t partition_id, std::string storage_address) : 
-        partition_type_(type), index_id_(index_id), global_partition_id_(partition_id), storage_node_address_(storage_address) {}
+    PartitionInitializeParams(IndexPartitionType type, int index_id, size_t partition_id, std::string storage_address, bool store_index_on_disk) : 
+        partition_type_(type), index_id_(index_id), global_partition_id_(partition_id), storage_node_address_(storage_address), store_remote_index_on_disk_(store_index_on_disk) {}
 };
 
 /**

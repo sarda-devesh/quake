@@ -22,13 +22,14 @@ StorageClient::StorageClient(std::string storage_address) {
     if constexpr(debug_) std::cout << "Created storage client to node " << storage_address << std::endl;
 }
 
-bool StorageClient::add_partition(size_t partition_id, int64_t code_size) { 
+bool StorageClient::add_partition(size_t partition_id, int64_t code_size, bool store_partition_on_disk) { 
     grpc::ClientContext context;
 
     // Set the request parameters
     RegisterPartitionRequest register_request; 
     register_request.set_partition_id(partition_id);
     register_request.set_code_size(code_size);
+    register_request.set_store_partition_on_disk(store_partition_on_disk);
 
     // Make the request
     Empty register_response;
@@ -68,11 +69,13 @@ bool StorageClient::add_vectors(size_t partition_id, size_t num_vectors, size_t 
     return status.ok();
 }
 
-std::pair<std::vector<float>, std::vector<int64_t>> StorageClient::perform_search(size_t partition_id, size_t k, int num_queries, size_t vector_dimension, const float* query_vectors, MetricType metric) { 
+std::shared_ptr<TopKRPCResult> StorageClient::perform_search(size_t partition_id, size_t k, int num_queries, size_t vector_dimension, const float* query_vectors, MetricType metric) { 
     // Create the request
+    std::shared_ptr<TopKRPCResult> rpc_result = std::make_shared<TopKRPCResult>();
     grpc::ClientContext context;
     PerformSearchRequest search_request; 
 
+    auto request_create_start = std::chrono::high_resolution_clock::now();
     search_request.set_partition_id(partition_id); search_request.set_k(k);
     search_request.set_num_queries(num_queries);
     switch(metric) { 
@@ -89,37 +92,40 @@ std::pair<std::vector<float>, std::vector<int64_t>> StorageClient::perform_searc
     auto* query_vector_field = search_request.mutable_query_vectors();
     query_vector_field->Clear(); query_vector_field->Reserve(total_vector_values);
     query_vector_field->Add(query_vectors, query_vectors + total_vector_values);
+    auto request_create_end = std::chrono::high_resolution_clock::now();
+    rpc_result->request_create_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(request_create_end - request_create_start).count();
 
     // Make the request
-    if constexpr(debug_) std::cout << "[Storage Client] Calling perform search for partition " << partition_id << std::endl;
+    auto rpc_time_start = std::chrono::high_resolution_clock::now();
     PerformSearchResponse search_response;
     grpc::Status status = stub_->PerformSearch(&context, search_request, &search_response);
     assert(status.ok());
-    if constexpr(debug_) std::cout << "[Storage Client] Finished perform search for partition " << partition_id << " with okay status of " << status.ok() << std::endl;
+    auto rpc_time_end = std::chrono::high_resolution_clock::now();
+    rpc_result->rpc_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(rpc_time_end - rpc_time_start).count();
 
-    // Create the result vectors from the response
+    // Create the result vectors by reading the response
+    auto response_parse_start = std::chrono::high_resolution_clock::now();
     int num_expected_responses = num_queries * k;
-    std::vector<int64_t> result_ids;
     auto response_ids_field = search_response.vector_ids();
     assert(response_ids_field.size() == num_expected_responses);
-
-    if constexpr(debug_) std::cout << "[Storage Client] Expected Responses - " << num_expected_responses << ", IDs Field Size - " << response_ids_field.size() << std::endl;
     for(int i = 0; i < num_expected_responses; i++) { 
-        result_ids.push_back(response_ids_field.Get(i));
-        if constexpr(debug_) std::cout << "[Storage Client] Result ID " << i << " has value of " << result_ids[result_ids.size() - 1] << std::endl;
+        rpc_result->ids.push_back(response_ids_field.Get(i));
     }
-    if constexpr(debug_) std::cout << "[Storage Client] Result IDs Size - " << result_ids.size() << std::endl;
 
-    std::vector<float> result_distances;
     auto response_distances_field = search_response.vector_distances();
     assert(response_distances_field.size() == num_expected_responses);
-
-    if constexpr(debug_) std::cout << "[Storage Client] Expected Responses - " << num_expected_responses << ", Dist Field Size - " << response_distances_field.size() << std::endl;
     for(int i = 0; i < num_expected_responses; i++) { 
-        result_distances.push_back(response_distances_field.Get(i));
-        if constexpr(debug_) std::cout << "[Storage Client] Result Distance " << i << " has value of " << result_distances[result_distances.size() - 1] << std::endl;
+        rpc_result->distances.push_back(response_distances_field.Get(i));
     }
-    if constexpr(debug_) std::cout << "[Storage Client] Result Distances Size - " << result_distances.size() << std::endl;
+    auto response_parse_end = std::chrono::high_resolution_clock::now();
+    rpc_result->response_parse_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(response_parse_end - response_parse_start).count();
 
-    return std::make_pair(result_distances, result_ids);
+    return rpc_result;
+}
+
+void StorageClient::print_metrics() { 
+    grpc::ClientContext context;
+    Empty request;
+    Empty response;
+    stub_->PrintAndResetMetrics(&context, request, &response);
 }

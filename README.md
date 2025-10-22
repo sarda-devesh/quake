@@ -154,9 +154,9 @@ $ cd quake
 $ rm -rf build && mkdir -p build && cd build
 $ cmake -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DQUAKE_SET_ABI_MODE=ON ..
 $ make coordinator -j$(nproc) && ./coordinator
-$ make storage_node -j$(nproc) && ./storage_node
+$ make storage_node -j$(nproc) && ./storage_node --num_workers=1
 $ make compute_node -j$(nproc) && ./compute_node
-$ make test_client -j$(nproc) && ./test_client
+$ make test_client -j$(nproc) && ./test_client --index_type="remote_inmem"
 
 Building the python code:
 $ cd build && make all -j$(nproc) && cd ..

@@ -17,8 +17,10 @@ InMemoryIndexPartition::InMemoryIndexPartition(int64_t num_vectors,
     ids_ = nullptr;
     numa_node_ = -1;
     core_id_ = -1;
-    ensure_capacity(num_vectors);
-    append(num_vectors, ids, codes);
+    if(num_vectors > 0) { 
+        ensure_capacity(num_vectors);
+        append(num_vectors, ids, codes);
+    }
 }
 
 // Move Constructor

@@ -8,6 +8,7 @@
 #include <partitions/index_partition.h>
 #include <list_scanning.h>
 #include <blockingconcurrentqueue.h>
+#include <parallel.h>
 
 #include <unordered_map>
 #include <memory>
@@ -20,7 +21,8 @@
 #include <condition_variable>
 
 constexpr int DEFAULT_NUM_PARTITION_STORE_WORKERS = 4;
-constexpr int DEFAULT_TOP_K_BUFFER_SIZE = 4;
+constexpr int DEFAULT_TOP_K_BUFFER_SIZE = 10;
+constexpr int THREAD_CORE_MAPPING_OFFSET = 3; // Offset used to map thread to core 
 
 /**
  * @brief Structure representing a search job.
@@ -39,6 +41,15 @@ struct PartitionSearchJob {
 };
 
 /**
+ * @brief Struct containing the result of a partition search
+ */
+struct PartitionSearchResult { 
+    int64_t job_init_time_ns; // The time taken to inititalize the scan job
+    int64_t job_enqueue_time_ns; // Time taken to add the job to the queue
+    int64_t job_wait_time_ns; // The time spent waiting for a result
+};
+
+/**
  * @brief Class used by the Storage Node in order to manage multiple partitions and to perform operating on them
  * 
  * Responsibilities:
@@ -47,6 +58,15 @@ struct PartitionSearchJob {
 */
 class PartitionStore { 
 public: 
+    /**
+     * @brief Struct storing worker specific resources
+     */
+    struct WorkerResources { 
+        std::unordered_map<std::string, std::shared_ptr<MetricStore>> metrics; ///< Map storing worker specific metrics
+    };
+
+    std::vector<WorkerResources> worker_resources_; // Vector storing the resources for each worker
+
     /**
      * @brief Constructor for PartitionStore.
      */
@@ -62,10 +82,11 @@ public:
      * 
      * @param partition_id The id of the partition to add
      * @param code_size The code size of the vectors in this partition
+     * @param store_partition_on_disk Whether we should store the partition on disk or in memory
      * 
      * @throws std::runtime_error if this partition already exists
      */
-    void add_partition(size_t partition_id, int64_t code_size);
+    void add_partition(size_t partition_id, int64_t code_size, bool store_partition_on_disk = true);
 
     /**
      * @brief Gets the dimension associated with the vectors in the specified partition
@@ -105,7 +126,7 @@ public:
      * 
      * @throws std::runtime_error if the partition does not exist.
      */
-    void perform_search(size_t partition_id, size_t k, int num_queries, const float* query_vectors, 
+    PartitionSearchResult perform_search(size_t partition_id, size_t k, int num_queries, const float* query_vectors, 
         MetricType metric, int64_t* result_ids, float* result_distances);     
 
      /**
@@ -132,8 +153,11 @@ private:
      *
      * Processes search process from the job queue
      *
+     * @param worker_id The id of the current worker
      */
-    void partition_search_worker_fn();    
+    void partition_search_worker_fn(int worker_id);  
+    
+    void record_worker_metrics(WorkerResources& res, std::string metric_name, float metric_value);
 
     std::vector<std::thread> worker_threads_;  ///< Container for worker threads.
     moodycamel::BlockingConcurrentQueue<PartitionSearchJob> job_queue_; // Queue of the current scan jobs

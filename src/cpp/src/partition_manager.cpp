@@ -77,7 +77,7 @@ void PartitionManager::init_partitions(
         } else { // Initialize this partition to be stored on a storage node
             std::shared_ptr<PartitionInitializeParams> initialize_params = std::make_shared<PartitionInitializeParams>(
                 IndexPartitionType::Remote, distributed_index_details->index_id, distributed_index_details->partition_ids[partition_id], 
-                distributed_index_details->partition_storage_nodes[partition_id]
+                distributed_index_details->partition_storage_nodes[partition_id], distributed_index_details->store_remote_index_on_disk
             );
             partition_store_->add_list(partition_id, initialize_params);
         }

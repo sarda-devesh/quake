@@ -531,7 +531,8 @@ namespace faiss {
                 partition = std::make_shared<OnDiskArrowIndexPartition>(pid, nv64, codes, ids, code_size);
             } else { // Distribute the index to the specified remote node
                 std::shared_ptr<PartitionInitializeParams> initialize_parameters = std::make_shared<PartitionInitializeParams>(IndexPartitionType::Remote,
-                    distributed_index_details->index_id, distributed_index_details->partition_ids[i], distributed_index_details->partition_storage_nodes[i]
+                    distributed_index_details->index_id, distributed_index_details->partition_ids[i], distributed_index_details->partition_storage_nodes[i],
+                    distributed_index_details->store_remote_index_on_disk
                 );
                 partition = std::make_shared<RemoteIndexPartition>(pid, code_size, initialize_parameters);
                 partition->append(nv64, ids, codes);

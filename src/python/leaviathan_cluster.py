@@ -19,23 +19,22 @@ class RunningWorker:
         finally:
             self.logfile_.close()
 
+DEFAULT_STORAGE_NODE_WORKERS = 8
 class LeviathanClusterManager:
 
     """
     A class to start/stop/manage a single Leviathan cluster. A single leviathan cluster
     is made up of a single coordinator node, and multiple compute and storage nodes
     """
-    def __init__(self, build_dir, num_compute, num_storage, base_port = 8000):
+    def __init__(self, build_dir, cluster_params, base_port = 8000):
         """
         Initializes the Cluster (without starting any of the nodes) with the specified parameter
         :param build_dir: The path to the build directory with the executables for the nodes
-        :param num_compute: The number of compute nodes we want to launch
-        :param num_storage: The number of storage nodes we want to launch
+        :param cluster_params: A dictionary hold different parameters related to the cluster/experiment
         :param base_port: The starting port to use for generating ports for these works grpc services
         """
         self.build_dir_ = build_dir
-        self.num_computes_ = num_compute
-        self.num_storage_ = num_storage
+        self.cluster_params_ = cluster_params
         self.curr_port_ = base_port
 
         self.workers_by_type = { 
@@ -100,9 +99,9 @@ class LeviathanClusterManager:
         # Determine the number of workers
         num_workers = 1
         if worker_type == "compute_node":
-            num_workers = self.num_computes_
+            num_workers = self.cluster_params_["num_compute"]
         elif worker_type == "storage_node":
-            num_workers = self.num_storage_
+            num_workers = self.cluster_params_["num_storage"]
 
         # Launch that many workers
         workers_arr = self.workers_by_type[worker_type]
@@ -118,6 +117,10 @@ class LeviathanClusterManager:
             else:
                 coordinator_address = self.workers_by_type["coordinator"][0].worker_address_
                 command_to_run = f"./{worker_type} --port={curr_port} --coordinator_address={coordinator_address}"
+                if worker_type == "storage_node":
+                    num_storage_workers = self.cluster_params_.get("num_storage_workers", DEFAULT_STORAGE_NODE_WORKERS)
+                    command_to_run += f" --num_workers={num_storage_workers}"
+
             print("Running worker", command_to_run, "whose output is logged to", logfile_name)
 
             # Launch the worker

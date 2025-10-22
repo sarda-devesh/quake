@@ -32,6 +32,7 @@
 #include <thread>
 #include <pthread.h>
 #include <ctime>
+#include <numeric>
 
 #ifdef QUAKE_USE_NUMA
 #include <numa.h>
@@ -65,6 +66,7 @@ using faiss::MetricType;
 // constants
 static const uint32_t SerializationMagicNumber = 0x44494E4C;
 static const uint32_t SerializationVersion = 3;
+constexpr float MS_TO_NS = 1000.0 * 1000.0;
 
 // Default constants for index build parameters
 constexpr int DEFAULT_NLIST = 0;                   ///< Default number of clusters (lists); if not specified, a flat index is assumed.
@@ -134,6 +136,7 @@ struct DistributedIndexDetails {
     int index_id; // The global id associated with the new index
     std::vector<size_t> partition_ids; // The globabl id for each of the index's partitions
     std::vector<std::string> partition_storage_nodes; // The storage nodes associated with the new index
+    bool store_remote_index_on_disk = true; // If we are intiializing a remote index, should it be stored in memory or on disk
 };
 
 /**
@@ -264,6 +267,7 @@ struct SearchResult {
     Tensor ids;
     Tensor distances;
     shared_ptr<SearchTimingInfo> timing_info;
+    int64_t result_write_time_ns; ///< Total time spent writing out the result to the grpc buffer
 };
 
 struct Clustering {
@@ -292,6 +296,38 @@ struct Clustering {
 
     int64_t cluster_size(int64_t i) const {
         return vectors[i].size(0);
+    }
+};
+
+struct MetricStore { 
+    vector<float> metric_values_;
+    std::string metric_name_;
+
+    MetricStore(std::string metric_name) : metric_name_(metric_name) {}
+
+    void add_value(float value) { 
+        metric_values_.push_back(value);
+    }
+
+    float get_mean() {
+        return std::accumulate(metric_values_.begin(), metric_values_.end(), 0.0);
+    }
+
+    float get_median() { 
+        if(metric_values_.empty()) {
+            return -1.0;
+        }
+
+        std::sort(metric_values_.begin(), metric_values_.end());
+        return metric_values_[metric_values_.size()/2];
+    }
+
+    void print_metric() { 
+        std::cout << "Metric " << metric_name_ << ": Mean - " << get_mean() << ", Median - " << get_median() << std::endl;
+    }
+
+    void reset_metric() { 
+        metric_values_.clear();
     }
 };
 

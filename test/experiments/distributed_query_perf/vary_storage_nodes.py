@@ -78,7 +78,7 @@ def run_experiment_for_config(curr_config, global_variables, complete_config):
     print("\nRunning experiment for config", curr_config)
 
     # Startup the cluster and give it time to bootup
-    cluster = LeviathanClusterManager(complete_config["quake_build_dir"], curr_config["num_compute"], curr_config["num_storage"])
+    cluster = LeviathanClusterManager(complete_config["quake_build_dir"], curr_config)
     assert cluster.start_cluster(), f"Failed to launch cluster for config {curr_config}"
     time.sleep(2)
 
@@ -88,9 +88,9 @@ def run_experiment_for_config(curr_config, global_variables, complete_config):
         store_index_locally = str(curr_config.get("load_index_locally", "False")).lower() == "true"
         remote_index = RemoteIndexWrapper(cluster.get_compute_node_address()[0])
         if not is_heartbeat_experiment:
-            store_index_on_disk = str(curr_config.get("store_index_on_disk", "False")).lower() == "true"
-            if "num_search_workers" in curr_config:
-                remote_index.load_index(global_variables["index_dir"], store_index_locally=store_index_locally, num_search_workers=curr_config["num_search_workers"], store_index_on_disk=store_index_on_disk)
+            store_index_on_disk = str(curr_config.get("store_index_on_disk", "True")).lower() == "true"
+            if "num_compute_workers" in curr_config:
+                remote_index.load_index(global_variables["index_dir"], store_index_locally=store_index_locally, num_search_workers=curr_config["num_compute_workers"], store_index_on_disk=store_index_on_disk)
             else:
                 remote_index.load_index(global_variables["index_dir"], store_index_locally=store_index_locally, store_index_on_disk=store_index_on_disk)
 
@@ -146,6 +146,8 @@ def run_experiment_for_config(curr_config, global_variables, complete_config):
                 }
                 query_results.append(curr_query_result)
                 operation_query_counter += 1
+            
+            print("Finished operation", operation_id, "/", len(operations))
     except Exception as e:
         print("[ERROR] Failed to run experiment with config", curr_config, " due to error", e)
         sucess = False
@@ -161,23 +163,32 @@ def run_experiment_for_config(curr_config, global_variables, complete_config):
 
 CONFIG_LABELS = {
     "baseline_rpc_latency" : "Boolean Echo RPC",
-    "leviathan_1_1_local" : "Partitions in memory on Compute Node", 
-    "leviathan_1_1_local_on_disk" : "Partitions in disk on Compute Node",
-    "leviathan_1_1" : "Partitions in disk on 1 Storage Node", 
-    "leviathan_1_2" : "Partitions in disk on 2 Storage Nodes",
-    "leviathan_1_4" : "Partitions in disk on 4 Storage Nodes",
-    "leviathan_1_8" : "Partitions in disk on 8 Storage Nodes",
+    "leviathan_1_1_local_in_mem" : "Partitions in memory on Compute Worker", 
+    "leviathan_1_1_remote_in_mem" : "Partitions in memory on Storage Worker", 
+    "leviathan_1_1_local_on_disk" : "Partitions in disk on Compute Worker",
+    "leviathan_1_1" : "Partitions in disk on 1 Storage Worker", 
+    "leviathan_1_2" : "Partitions in disk on 2 Storage Workers",
+    "leviathan_1_4" : "Partitions in disk on 4 Storage Workers",
+    "leviathan_1_8" : "Partitions in disk on 8 Storage Workers",
 }
 NS_TO_MS = 1.0e6
 def visualize_result_latency(experimental_results, save_path):
     plt.style.use('seaborn-v0_8-whitegrid')
     fig, ax = plt.subplots(figsize=(10, 6))
 
+    # Don't draw a CDF for the baseline experiment
+    if "baseline_rpc_latency" in experimental_results:
+        baseline_results = experimental_results.pop("baseline_rpc_latency")
+        baseline_latency = np.mean(baseline_results["latency_ns"].values)/NS_TO_MS
+        ax.axvline(x = baseline_latency, color='red', linewidth = 4, linestyle='--', label='Echo RPC Time')
+
+    counter = 0
     for config_name, config_result in experimental_results.items():
         latencies = config_result["latency_ns"].values/NS_TO_MS
         sorted_latencies = np.sort(latencies)
         y_values = np.arange(1, len(sorted_latencies) + 1) / len(sorted_latencies)
         ax.plot(sorted_latencies, y_values, label=CONFIG_LABELS[config_name], linewidth=2)
+        counter += 1
 
     # Configure the axis details
     ax.set_xscale('log')
@@ -245,42 +256,41 @@ configs:
     load_index_locally: "True"
     num_compute: 1
     num_storage: 0
-    num_search_workers: 16
+    num_compute_workers: 1
 
-  - name: leviathan_1_1_local
+  - name: leviathan_1_1_local_in_mem
     load_index_locally: "True"
+    store_index_on_disk: "False"
     num_compute: 1
     num_storage: 0
-    num_search_workers: 16
- 
-  - name: leviathan_1_1_local_on_disk
-    load_index_locally: "True"
-    store_index_on_disk: "True"
-    num_compute: 1
-    num_storage: 0
-    num_search_workers: 16
-
-  - name: leviathan_1_1
+    num_compute_workers: 1
+  
+  - name: leviathan_1_1_remote_in_mem
     load_index_locally: "False"
+    store_index_on_disk: "False"
     num_compute: 1
     num_storage: 1
-    num_search_workers: 16
+    num_compute_workers: 1
+    num_storage_workers: 1
   
   - name: leviathan_1_2
     load_index_locally: "False"
     num_compute: 1
     num_storage: 2
-    num_search_workers: 16
+    num_storage_workers: 1
+    num_compute_workers: 1
   
   - name: leviathan_1_4
     load_index_locally: "False"
     num_compute: 1
     num_storage: 4
-    num_search_workers: 16
+    num_storage_workers: 1
+    num_compute_workers: 1
   
   - name: leviathan_1_8
     load_index_locally: "False"
     num_compute: 1
     num_storage: 8
-    num_search_workers: 16
+    num_storage_workers: 1
+    num_compute_workers: 1
 """

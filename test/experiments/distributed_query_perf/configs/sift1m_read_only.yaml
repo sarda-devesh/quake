@@ -27,49 +27,27 @@ workload:
   cluster_size: 1000
   cluster_sample_distribution: uniform
 
-configs:
+configs:  
   - name: baseline_rpc_latency
     load_index_locally: "True"
     num_compute: 1
     num_storage: 0
-    num_search_workers: 16
+    num_compute_workers: 1
 
-  - name: leviathan_1_1_local
+  - name: leviathan_1_1_local_in_mem
     load_index_locally: "True"
+    store_index_on_disk: "False"
     num_compute: 1
     num_storage: 0
-    num_search_workers: 16
- 
-  - name: leviathan_1_1_local_on_disk
-    load_index_locally: "True"
-    store_index_on_disk: "True"
-    num_compute: 1
-    num_storage: 0
-    num_search_workers: 16
+    num_compute_workers: 1
 
-  - name: leviathan_1_1
+  - name: leviathan_1_1_remote_in_mem
     load_index_locally: "False"
+    store_index_on_disk: "False"
     num_compute: 1
     num_storage: 1
-    num_search_workers: 16
-  
-  - name: leviathan_1_2
-    load_index_locally: "False"
-    num_compute: 1
-    num_storage: 2
-    num_search_workers: 16
-  
-  - name: leviathan_1_4
-    load_index_locally: "False"
-    num_compute: 1
-    num_storage: 4
-    num_search_workers: 16
-  
-  - name: leviathan_1_8
-    load_index_locally: "False"
-    num_compute: 1
-    num_storage: 8
-    num_search_workers: 16
+    num_compute_workers: 1
+    num_storage_workers: 1
 
 results_dir: /working_dir/quake_results
 workload_dir: /working_dir/quake_workloads

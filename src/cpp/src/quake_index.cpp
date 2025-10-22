@@ -167,7 +167,7 @@ shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
 }
 
 bool QuakeIndex::validate() {
-    partition_manager_->validate();
+    return partition_manager_->validate();
 }
 
 
@@ -255,10 +255,11 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers, bool distribut
         std::shared_ptr<CoordinatorClient> coordinator_client = CoordinatorClient::GetCoordinatorClient();
         distributed_index_details = coordinator_client->register_new_index(num_partitions);
         index_id_ = distributed_index_details->index_id;
+        distributed_index_details->store_remote_index_on_disk = store_index_on_disk;
     } else if(store_index_on_disk) { 
         distributed_index_details = std::make_shared<DistributedIndexDetails>();
         distributed_index_details->index_partition_type = IndexPartitionType::OnDiskArrow;
-    } 
+    }
 
     // 2. Create partition manager and load it
     {

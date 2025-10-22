@@ -46,7 +46,6 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
         res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
         res.job_queue = moodycamel::BlockingConcurrentQueue<ScanJob>();
     }
-
 }
 
 // Initialize Worker Threads
@@ -94,6 +93,13 @@ void QueryCoordinator::shutdown_workers() {
     }
     worker_threads_.clear();
     workers_initialized_ = false;
+}
+
+inline void QueryCoordinator::record_worker_metrics(CoreResources& res, std::string metric_name, float metric_value) {
+    if(res.metrics.find(metric_name) == res.metrics.end()) { 
+        res.metrics[metric_name] = std::make_shared<MetricStore>(metric_name);
+    }
+    res.metrics[metric_name]->add_value(metric_value);
 }
 
 // Worker Thread Function
@@ -153,6 +159,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
             if (!job.is_batched) {
                 // Allocate a thread-local query buffer if needed.
+                auto scan_initialize_start = std::chrono::high_resolution_clock::now();
                 if (res.local_query_buffer.size() < partition_manager_->d() * sizeof(float)) {
                     res.local_query_buffer.resize(partition_manager_->d() * sizeof(float));
                 }
@@ -161,19 +168,36 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 if (memcpy(res.local_query_buffer.data(), job.query_vector, partition_manager_->d() * sizeof(float)) == nullptr) {
                     throw std::runtime_error("[partition_scan_worker_fn] memcpy failed.");
                 }
+                auto scan_initialize_end = std::chrono::high_resolution_clock::now();
+                int64_t scan_initialize_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(scan_initialize_end - scan_initialize_start).count();
 
                 // Get the top k from the storage node
+                auto top_k_rpc_start = std::chrono::high_resolution_clock::now();
                 if constexpr(debug_) std::cout << "Calling get top k on remote partition with k = " << job.k << std::endl;
                 
-                auto [topk_distances, topk_ids] = remote_partition->get_top_k(
+                auto top_k_result = remote_partition->get_top_k(
                     job.k, 1, reinterpret_cast<const float*>(res.local_query_buffer.data()), metric_
                 );
-                if constexpr(debug_) std::cout << "Get Top K returned vectors of size " << topk_distances.size() << " and " << topk_ids.size() << std::endl;
+                if constexpr(debug_) std::cout << "Get Top K returned vectors of size " << top_k_result->distances.size() << " and " << top_k_result->ids.size() << std::endl;
+                auto top_k_rpc_end = std::chrono::high_resolution_clock::now();
+                int64_t top_k_rpc_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(top_k_rpc_end - top_k_rpc_start).count();
 
                 // Merge the result with the global buffer
+                auto result_write_start = std::chrono::high_resolution_clock::now();
                 std::shared_ptr<TopkBuffer> query_result_buffer = global_topk_buffer_pool_[job.query_ids[0]];
-                query_result_buffer->batch_add(topk_distances.data(), topk_ids.data(), topk_ids.size());
+                query_result_buffer->batch_add(top_k_result->distances.data(), top_k_result->ids.data(), top_k_result->ids.size());
                 job_flags_[job.query_ids[0]][job.rank] = true;
+                auto result_write_end = std::chrono::high_resolution_clock::now();
+                int64_t result_write_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(result_write_end - result_write_start).count();
+                
+
+                // Record scan times
+                record_worker_metrics(res, "remote_scan_job_initialize_ms", scan_initialize_ns/MS_TO_NS);
+                record_worker_metrics(res, "remote_scan_request_ms", top_k_rpc_ns/MS_TO_NS);
+                record_worker_metrics(res, "remote_scan_request_create_ms", top_k_result->request_create_time_ns/MS_TO_NS);
+                record_worker_metrics(res, "remote_scan_rpc_call_ms", top_k_result->rpc_time_ns/MS_TO_NS);
+                record_worker_metrics(res, "remote_scan_response_parse_ms", top_k_result->response_parse_time_ns/MS_TO_NS);
+                record_worker_metrics(res, "remote_result_write_ms", result_write_ns/MS_TO_NS);
             } else { 
                 // Allocate a thread-local query buffer if needed.
                 if (res.local_query_buffer.size() < partition_manager_->d() * sizeof(float) * job.num_queries) {
@@ -197,7 +221,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 }
 
                 // Get the top k from the storage node
-                auto [topk_distances, topk_ids] = remote_partition->get_top_k(
+                auto top_k_result = remote_partition->get_top_k(
                     job.k, job.num_queries, reinterpret_cast<const float*>(res.local_query_buffer.data()), metric_
                 );
 
@@ -208,7 +232,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                     std::shared_ptr<TopkBuffer> query_result_buffer = global_topk_buffer_pool_[global_query_id];
 
                     // Add in the results for this query
-                    query_result_buffer->batch_add(topk_distances.data() + query_offset, topk_ids.data() + query_offset, job.k);
+                    query_result_buffer->batch_add(top_k_result->distances.data() + query_offset, top_k_result->ids.data() + query_offset, job.k);
                 }
             }
 
@@ -231,6 +255,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         if (!job.is_batched) {
 
             // Allocate a thread-local query buffer if needed.
+            auto scan_initialize_start = std::chrono::high_resolution_clock::now();
             if (res.local_query_buffer.size() < partition_manager_->d() * sizeof(float)) {
                 res.local_query_buffer.resize(partition_manager_->d() * sizeof(float));
             }
@@ -246,7 +271,12 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 local_topk_buffer->set_k(job.k);
                 local_topk_buffer->reset();
             }
+            auto scan_initialize_end = std::chrono::high_resolution_clock::now();
+            int64_t scan_initialize_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(scan_initialize_end - scan_initialize_start).count();
+            record_worker_metrics(res, "local_scan_job_initialize_ms", scan_initialize_ns/MS_TO_NS);
+
             // Perform the scan on the partition.
+            auto scan_list_start = std::chrono::high_resolution_clock::now();
             scan_list((float *) res.local_query_buffer.data(),
                 partition_codes,
                 partition_ids,
@@ -254,7 +284,11 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                       partition_manager_->d(),
                       *local_topk_buffer,
                       metric_);
+            auto scan_list_end = std::chrono::high_resolution_clock::now();
+            int64_t scan_list_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(scan_list_end - scan_list_start).count();
+            record_worker_metrics(res, "local_scan_list_ms", scan_list_ns/MS_TO_NS);
 
+            auto result_write_start = std::chrono::high_resolution_clock::now();
             vector<float> topk = local_topk_buffer->get_topk();
             vector<int64_t> topk_indices = local_topk_buffer->get_topk_indices();
             int64_t n_results = topk_indices.size();
@@ -263,6 +297,9 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             std::shared_ptr<TopkBuffer> result_buffer = global_topk_buffer_pool_[job.query_ids[0]];
             result_buffer->batch_add(topk.data(), topk_indices.data(), n_results);
             job_flags_[job.query_ids[0]][job.rank] = true;
+            auto result_write_end = std::chrono::high_resolution_clock::now();
+            int64_t result_write_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(result_write_end - result_write_start).count();
+            record_worker_metrics(res, "local_scan_result_write_ms", result_write_ns/MS_TO_NS);
 
             if constexpr(debug_) {
                 {

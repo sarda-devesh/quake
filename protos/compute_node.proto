@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "google/protobuf/empty.proto";
+
 package computenode;
 
 service ComputeNode { 
@@ -14,6 +16,9 @@ service ComputeNode {
 
     // Heartbeat endpoint that can be used to check if the server is alive
     rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply) { }
+
+    // RPC to print and reset the collected system metrics
+    rpc PrintAndResetMetrics (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
 
 // Messages used to create new/load existing index
